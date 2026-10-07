@@ -1,0 +1,111 @@
+{
+  "name": "proxy_tools",
+  "version": "0.1.0",
+  "checkedAt": "2026-10-07",
+  "status": "source-bound-with-metadata-conflict",
+  "license": "BSD-2-Clause (proxy source notice); embedded Werkzeug portions: BSD-3-Clause; METADATA declares MIT",
+  "distribution": {
+    "url": "https://files.pythonhosted.org/packages/f2/cf/77d3e19b7fabd03895caca7857ef51e4c409e0ca6b37ee6e9f7daa50b642/proxy_tools-0.1.0.tar.gz",
+    "filename": "proxy_tools-0.1.0.tar.gz",
+    "sha256": "ccb3751f529c047e2d8a58440d86b205303cf0fe8146f784d1cbcd94f0a28010",
+    "bytes": 2978
+  },
+  "notes": [
+    "No release tag exists. The source and README in the official 0.1.0 sdist match this pre-upload commit verbatim; the installed source matches the sdist.",
+    "The original code header explicitly declares BSD and records Armin Ronacher (2013), adapted by Jonathan Tushman (2014). The same commit carries the BSD LICENSE.txt.",
+    "setup.py and PKG-INFO declare MIT. This metadata discrepancy is retained; no MIT replacement or new permission is fabricated.",
+    "The original LICENSE.txt contains the literal <COPYRIGHT HOLDER> placeholder and a joined final sentence. They are preserved verbatim, together with the complete BSD grant, conditions and disclaimer.",
+    "The original source explicitly states extraction from Werkzeug. Verbatim complete methods and forwarding tail match the official pre-release Werkzeug 0.9.4 artifact; its original BSD-3-Clause LICENSE and AUTHORS/source copyright notice are also carried. The exact extraction version/commit is not asserted."
+  ],
+  "sourceCodeBinding": {
+    "sdistMember": "proxy_tools-0.1.0/proxy_tools/__init__.py",
+    "commitPath": "proxy_tools/__init__.py",
+    "sha256": "d1539d95e1a713c068ca81d42e047b2c76568964cf277596d4e19efb22f476be",
+    "sdistAndCommitEqual": true,
+    "sdistAndInstalledEqual": true,
+    "copyright": "(c) 2013 by Armin Ronacher (adapted by Jonathan Tushman 2014)",
+    "originalLicenseDeclaration": "BSD, see LICENSE for more details."
+  },
+  "licenseSource": {
+    "url": "https://raw.githubusercontent.com/jtushman/proxy_tools/f82ae43524fd6d9917b0e9490c7d0394dff8d155/LICENSE.txt",
+    "commit": "f82ae43524fd6d9917b0e9490c7d0394dff8d155",
+    "tag": null,
+    "path": "LICENSE.txt",
+    "sha256": "a428fb8a2e762af3eb0a6edbbb88e9b42ccfee80fd9b423958bcacf9b9abbfe4",
+    "bytes": 1436,
+    "preparedTemplate": false
+  },
+  "material": {
+    "path": "LICENSE",
+    "sha256": "3bdd6c691a6dbd32f88d8c15959f635cb6782e8c316ee6fdb29ef4e53444e93f",
+    "bytes": 2503
+  },
+  "embeddedNotices": [
+    {
+      "path": "LICENSE-Werkzeug-BSD",
+      "license": "BSD-3-Clause",
+      "copyright": "Copyright (c) 2011 by the Werkzeug Team, see AUTHORS for more details.",
+      "sha256": "41fe7d01e6145b3df6e0652b23d0ea1cba050eab48209a99a1ecf3c70afd9e5f",
+      "bytes": 1532,
+      "source": {
+        "url": "https://files.pythonhosted.org/packages/d8/5e/8abc95630f9c4248edffed30592468f884e845ba656a959a12e452fafcec/Werkzeug-0.9.4.tar.gz",
+        "sha256": "c1baf7a3e8be70f34d931ee173283f406877bd3d17f372bbe82318a5b3c510cc",
+        "member": "Werkzeug-0.9.4/LICENSE"
+      },
+      "codeBinding": {
+        "derivedPackage": "proxy_tools 0.1.0",
+        "upstreamReference": "Werkzeug 0.9.4",
+        "upstreamReferenceReleased": "2013-08-25T23:20:28.045258Z",
+        "proxyRelease": "2014-05-05T21:02:24.606594Z",
+        "proxyDeclaresExtraction": true,
+        "upstreamMember": "Werkzeug-0.9.4/werkzeug/local.py",
+        "upstreamSha256": "f62fdfb080dfee7f3259ee4e5e1035d82593bf48a4270b4baea1343dd726d893",
+        "proxySha256": "d1539d95e1a713c068ca81d42e047b2c76568964cf277596d4e19efb22f476be",
+        "wholeFilesEqual": false,
+        "exactOriginalExtractionVersionAsserted": false,
+        "completeMethodsVerbatim": [
+          {
+            "name": "_get_current_object",
+            "completeMethodSha256": "254a38ef032e56c1081ec288296dd65be20f9bb427fab8f747909ee651910649",
+            "exactTextEqual": true
+          },
+          {
+            "name": "__bool__",
+            "completeMethodSha256": "38db9b9beb629f1bb73fedf589c6849a5af2892b6d0d2631b697a6736982f9f8",
+            "exactTextEqual": true
+          },
+          {
+            "name": "__unicode__",
+            "completeMethodSha256": "79b19f5b4eb31a5fccfda500aaaa45a5ee860ac18d0e05c45debd4d0c65524c7",
+            "exactTextEqual": true
+          },
+          {
+            "name": "__dir__",
+            "completeMethodSha256": "74bde77251805fce935d22d71cd984b363e29daf14caaa8c53fa0a1906ff63d9",
+            "exactTextEqual": true
+          },
+          {
+            "name": "__getattr__",
+            "completeMethodSha256": "78fb29cf5e507046a177b23f0a18e53127600a548c6d32dae62b1cb55f509ee4",
+            "exactTextEqual": true
+          }
+        ],
+        "completeForwardingTailVerbatim": true,
+        "forwardingTailSha256": "abdbea5d01d79347d102811ceb147db81f53730d0e3b880c23d0ee16237941dd",
+        "note": "Proxy renames LocalProxy and changes its examples/initializer/repr; the exact upstream extraction commit is not declared. This pre-release official artifact proves matching copied blocks and carries their original BSD-3-Clause terms."
+      }
+    },
+    {
+      "path": "NOTICE-Werkzeug-AUTHORS",
+      "kind": "original authors plus original source copyright header",
+      "sha256": "3b6907b6d2248e817e92cb3c061ef1e7b7ab478ca20ba052446a6691d13e14d0",
+      "bytes": 1963,
+      "originalAuthorsSha256": "011975ac125e463a490ae3248e945850b5f25ce2798c537abed52f6f070a05d8",
+      "source": {
+        "url": "https://files.pythonhosted.org/packages/d8/5e/8abc95630f9c4248edffed30592468f884e845ba656a959a12e452fafcec/Werkzeug-0.9.4.tar.gz",
+        "sha256": "c1baf7a3e8be70f34d931ee173283f406877bd3d17f372bbe82318a5b3c510cc",
+        "member": "Werkzeug-0.9.4/AUTHORS"
+      }
+    }
+  ]
+}

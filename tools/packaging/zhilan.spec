@@ -244,7 +244,7 @@ for _doc_parse_pkg in ("magika", "docvortex", "mineru"):
 # 原因是 PyInstaller 收不全它们（`collect_dynamic_libs` 只扫包顶层、ggml 后端是运行期按名
 # 动态加载的）。那一段**已整段删除**，删的理由如下：
 #
-#   §九 Q4 定案：交付包**只带许可干净的官方 ONNX 件**（818.45MB / 13 件），**不带**第三方 GGUF、
+#   历史本地交付选用 ONNX 件（818.45MB / 13 件）；公开分发许可须逐文件核验，**不带**第三方 GGUF、
 #   **不带** `mineru_llama_cpp`（该包 METADATA **无 License 字段** ⇒ 没有可依附的许可文本，
 #   D3 = 不接受无许可分发风险）。VLM 改为**用户自备**的可选增强（`MINERU_VLM_ENABLE` 默认 `False`）。
 #   ⇒ 交付形态的运行时**不需要 llama.cpp**，显式收集它只会把无许可件打进交付包。

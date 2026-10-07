@@ -1,34 +1,16 @@
 # -*- coding: utf-8 -*-
-"""回归修复 判据载体：9 包许可全文随包（vendor）。
+"""核对九包 vendor 材料、固定来源和随包字节保真。
 
-**缺陷**：打包许可暂存（`tools/packaging/collect_licenses.py` 产出 `build/licenses-stage/licenses/`，
-由 `zhilan.iss` 全量随包）里 9 个包缺许可全文、只有（或没有）`METADATA-授权声明.txt`——
-它们的 wheel 内不含 LICENSE 文件：cobble / flatbuffers / grpcio_tools / jieba /
-latex2mathml / loguru / magika / proxy_tools / tokenizers。
-
-**修法（拍板⑥ 修法①：上游取许可全文随包）**：上游原文由人工一次性抓取进仓库
-`tools/packaging/licenses-vendor/<包名>/LICENSE`（每份末尾附来源注记）；
-`collect_licenses.py` 在「dist-info 与包目录都无全文」时回退到 vendor 目录，命中即随包全文。
-
-**三条腿**：
-
-- 腿①（静态）：vendor 目录对 9 个包名逐个有非空 LICENSE（>=500 B），且目录名清单钉死；
-- 腿②（静态）：内容标记——4 个 Apache 包含 "Apache License" + "Version 2.0"；
-  MIT/BSD 逐包对应（jieba / latex2mathml / loguru 含 "MIT License"，cobble 含 "BSD 2-Clause"；
-  **proxy_tools 以上游原文自述 "The BSD License" 为标记**——其上游 LICENSE.txt 原文自称 BSD
-  （版权 Armin Ronacher / Jonathan Tushman），而 wheel METADATA 声明 MIT，两者并存以原文为准，
-  详见该 vendor 文件末尾的来源注记）；
-- 腿③（行为腿，skipif 打包 venv 不在本机）：实跑 `collect_licenses.py`（`--out` 指向 tmp_path、
-  `--inno-license` 用 tmp 替身——脚本对该件的检查是无条件的），断言输出 `licenses/` 下
-  9 个包各得 LICENSE 全文且 >500 B，再断言 `00-许可证清单.txt` 不再含
-  「连包目录里都找不到许可全文」的旧断言、且 vendor 命中数如实为 9 / 未覆盖 0。
-
-**红线**：`collect()` 的 MUST_HAVE 硬断言集合不动；本文件不碰 `zhilan.iss`；
-打包 venv（`<build-environment>`）与 `<legacy-repo>` 只读——腿③只写 `tmp_path`。
+保留原九包清单、许可标记、正文大小和 collector 行为检查。SOURCE.json
+进一步绑定材料与固定版本：原始许可正文按其前缀字节核对；cobble 的 BSD
+整理模板不得冒充原件，并须携带嵌入 inflection 的原始 MIT 许可。
+proxy_tools 的原始 BSD 正文与 MIT 元数据差异保留。复制成功不代表法律合规通过。
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -97,9 +79,46 @@ def test_071_vendor_content_markers(pkg: str) -> None:
     text = (VENDOR_DIR / pkg / "LICENSE").read_text(encoding="utf-8")
     for marker in CONTENT_MARKERS[pkg]:
         assert marker in text, f"{pkg} 的 vendor LICENSE 缺标记「{marker}」"
-    # 来源注记块（回归修复 要求的 3 行来源注记）必在文件末尾
+    # 来源注记与结构化版本依据必须同时保留。
     assert "-----" in text, f"{pkg} 的 vendor LICENSE 缺来源注记分隔线"
-    assert "用途：随包许可证全文" in text, f"{pkg} 的 vendor LICENSE 缺用途注记行"
+    assert "SOURCE.json" in text, f"{pkg} 的 vendor LICENSE 缺来源记录引用"
+    source = json.loads((VENDOR_DIR / pkg / "SOURCE.json").read_text(encoding="utf-8"))
+    material = (VENDOR_DIR / pkg / "LICENSE").read_bytes()
+    assert source["name"] == pkg
+    assert source["version"]
+    assert source["material"]["bytes"] == len(material)
+    assert source["material"]["sha256"] == hashlib.sha256(material).hexdigest()
+    assert len(source["distribution"]["sha256"]) == 64
+    original = source["licenseSource"]
+    if pkg == "cobble":
+        assert source["status"] == "declared-license-prepared-text"
+        assert original["preparedTemplate"] is True
+        assert len(source["primaryDeclaration"]["commit"]) == 40
+        embedded = source["embeddedNotices"][0]
+        mit = (VENDOR_DIR / pkg / embedded["path"]).read_bytes()
+        assert embedded["sha256"] == hashlib.sha256(mit).hexdigest()
+        assert b"Copyright (C) 2012-2015 Janne Vanhala" in mit
+        assert b"Permission is hereby granted" in mit
+        assert embedded["codeBinding"]["completeUnderscoreFunctionEqual"] is True
+    else:
+        assert original["preparedTemplate"] is False
+        assert len(original["commit"]) == 40
+        assert hashlib.sha256(material[:original["bytes"]]).hexdigest() == original["sha256"]
+        if pkg == "proxy_tools":
+            assert source["status"] == "source-bound-with-metadata-conflict"
+            assert source["sourceCodeBinding"]["sdistAndCommitEqual"] is True
+            assert source["sourceCodeBinding"]["sdistAndInstalledEqual"] is True
+            assert "METADATA declares MIT" in source["license"]
+            for embedded in source["embeddedNotices"]:
+                raw = (VENDOR_DIR / pkg / embedded["path"]).read_bytes()
+                assert len(raw) == embedded["bytes"]
+                assert hashlib.sha256(raw).hexdigest() == embedded["sha256"]
+            werkzeug = (VENDOR_DIR / pkg / "LICENSE-Werkzeug-BSD").read_bytes()
+            assert b"Copyright (c) 2011 by the Werkzeug Team" in werkzeug
+            assert "may not be used to endorse or promote" in " ".join(
+                werkzeug.decode("utf-8").split()
+            )
+            assert source["embeddedNotices"][0]["codeBinding"]["completeForwardingTailVerbatim"]
 
 
 # ────────────────────────────── 腿③：行为腿（实跑收集脚本） ──────────────────────────────
@@ -116,6 +135,13 @@ def test_071_collect_licenses_vendors_full_texts(tmp_path: Path) -> None:
     out_dir = tmp_path / "licenses-stage"
     inno_stub = tmp_path / "inno-license.txt"
     inno_stub.write_text("stub：测试替身（脚本对 Inno license 的存在性检查是无条件的）\n", encoding="utf-8")
+    webview_stub = tmp_path / "webview-license.txt"
+    webview_stub.write_text(
+        "MICROSOFT EDGE WEBVIEW2 RUNTIME\nDISTRIBUTABLE CODE\nSmartScreen\n"
+        + "Explicit test fixture, not a distribution license.\n" * 20,
+        encoding="utf-8",
+        newline="\r\n",
+    )
     env = {
         **os.environ,
         "PYTHONDONTWRITEBYTECODE": "1",
@@ -131,6 +157,8 @@ def test_071_collect_licenses_vendors_full_texts(tmp_path: Path) -> None:
             str(out_dir),
             "--inno-license",
             str(inno_stub),
+            "--webview-license",
+            str(webview_stub),
         ],
         capture_output=True,
         text=True,
@@ -143,13 +171,35 @@ def test_071_collect_licenses_vendors_full_texts(tmp_path: Path) -> None:
     )
     assert proc.returncode == 0, f"collect_licenses 未过（MUST_HAVE 门禁）：\n{proc.stdout}\n{proc.stderr}"
 
-    # ① 9 个包的 LICENSE 全文随包（>500 B）
+    # ① 九包材料及 SOURCE.json 逐字随包（模板与原文由来源记录区分）。
     for pkg in VENDOR_PACKAGES:
         lic = out_dir / "licenses" / pkg / "LICENSE"
         assert lic.is_file(), f"vendor 全文未随包：{lic}"
         assert lic.stat().st_size >= 500, f"随包全文过小：{lic}（{lic.stat().st_size} B）"
+        assert lic.read_bytes() == (VENDOR_DIR / pkg / "LICENSE").read_bytes()
+        assert (out_dir / "licenses" / pkg / "SOURCE.json").read_bytes() == (
+            VENDOR_DIR / pkg / "SOURCE.json"
+        ).read_bytes()
+    assert (out_dir / "licenses" / "cobble" / "LICENSE-inflection-MIT").read_bytes() == (
+        VENDOR_DIR / "cobble" / "LICENSE-inflection-MIT"
+    ).read_bytes()
+    for name in ("LICENSE-Werkzeug-BSD", "NOTICE-Werkzeug-AUTHORS"):
+        assert (out_dir / "licenses" / "proxy_tools" / name).read_bytes() == (
+            VENDOR_DIR / "proxy_tools" / name
+        ).read_bytes()
+    assert (out_dir / "licenses" / "Microsoft-WebView2-Runtime" / "LICENSE.txt").read_bytes() == (
+        webview_stub.read_bytes()
+    )
+    terms = (out_dir / "INSTALLATION-TERMS.txt").read_text(encoding="utf-8-sig")
+    assert b"\r\r\n" not in (out_dir / "INSTALLATION-TERMS.txt").read_bytes()
+    assert webview_stub.read_text(encoding="utf-8") in terms
+    assert "Microsoft Defender SmartScreen" in terms
+    assert "默认启用时会收集并发送用户信息给 Microsoft" in terms
+    assert (out_dir / "licenses" / "mineru" / "LICENSE.md").read_text(encoding="utf-8") in terms
 
     # ② 清单不再含旧头部断言；vendor 命中数如实（9 命中 / 0 未覆盖）
     index = (out_dir / "licenses" / "00-许可证清单.txt").read_text(encoding="utf-8")
     assert _OldAssertion not in index, "清单仍含过时断言「连包目录里都找不到许可全文」"
-    assert "vendor 已随包携带上游全文 9 个，仍未覆盖 0 个" in index, "清单的 vendor 命中数不如实"
+    assert "vendor 仓内材料已携带 9 个，仍无材料 0 个" in index, "清单的 vendor 命中数不如实"
+    assert "vendor 已随包携带上游全文 9 个" not in index
+    assert "Python材料包数：157；" in index

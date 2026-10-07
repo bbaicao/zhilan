@@ -4,8 +4,8 @@
 # 生成命令：python tools/packaging/models_manifest.py gen --root <模型根> --out tools/packaging/models-manifest.txt
 # 校验命令：python tools/packaging/models_manifest.py verify --root <模型根> --manifest tools/packaging/models-manifest.txt
 #
-# 声明：本清单**只覆盖官方 ONNX 件**，不含任何 .gguf、不含 mineru_llama_cpp、
-#       不含第三方再分发件（依据 Q2-a 与 当前模型包范围）。
+# 声明：本清单覆盖 OpenDataLab 固定 ONNX 集合的文件，不含 .gguf 或 mineru_llama_cpp。
+#       逐件上游包括第三方 Formula 配置；固定来源、许可与改动见模型包 MODEL-SOURCES.json。
 # 件数：13 件；总字节：858204914
 # 格式：<sha256><两个空格><相对路径><两个空格><字节数>（相对路径相对于模型根）
 cd540dc296ff3115fe78efa65b68501e6a8dc74b198acc9834a725ffaa095aac  Layout/PP-DocLayoutV2/inference.onnx  213963712

@@ -1,0 +1,28 @@
+{
+  "name": "jieba",
+  "version": "0.42.1",
+  "checkedAt": "2026-10-07",
+  "status": "version-bound",
+  "license": "MIT",
+  "distribution": {
+    "url": "https://files.pythonhosted.org/packages/c6/cb/18eeb235f833b726522d7ebed54f2278ce28ba9438e3135ab0278d9792a2/jieba-0.42.1.tar.gz",
+    "filename": "jieba-0.42.1.tar.gz",
+    "sha256": "055ca12f62674fafed09427f176506079bc135638a14e23e25be909131928db2",
+    "bytes": 19214172
+  },
+  "notes": [],
+  "licenseSource": {
+    "url": "https://raw.githubusercontent.com/fxsjy/jieba/1e20c89b66f56c9301b0feed211733ffaa1bd72a/LICENSE",
+    "commit": "1e20c89b66f56c9301b0feed211733ffaa1bd72a",
+    "tag": "v0.42.1",
+    "path": "LICENSE",
+    "sha256": "18ba0984839f85853b29fadaf992f7dba8fd0ca0fbeae34de2b8735222dc7a37",
+    "bytes": 1075,
+    "preparedTemplate": false
+  },
+  "material": {
+    "path": "LICENSE",
+    "sha256": "d9a705412a573cb458837ea39be0146399285564e24059c021f69f8d483ea680",
+    "bytes": 1728
+  }
+}

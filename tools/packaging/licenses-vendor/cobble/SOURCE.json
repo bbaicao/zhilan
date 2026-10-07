@@ -1,0 +1,64 @@
+{
+  "name": "cobble",
+  "version": "0.1.4",
+  "checkedAt": "2026-10-07",
+  "status": "declared-license-prepared-text",
+  "license": "BSD-2-Clause; embedded inflection portion: MIT",
+  "distribution": {
+    "url": "https://files.pythonhosted.org/packages/54/7a/a507c709be2c96e1bb6102eb7b7f4026c5e5e223ef7d745a17d239e9d844/cobble-0.1.4.tar.gz",
+    "filename": "cobble-0.1.4.tar.gz",
+    "sha256": "de38be1539992c8a06e569630717c485a5f91be2192c461ea2b220607dfa78aa",
+    "bytes": 3805
+  },
+  "notes": [
+    "The 0.1.4 official README declares 2-Clause BSD. The matching immutable PyPI sdist and release commit contain no LICENSE file for the main work.",
+    "The main BSD text is a prepared standard reference, not an upstream original. Its copyright placeholders are left unfilled. Publisher author metadata is retained separately and is not represented as an original copyright notice.",
+    "The embedded cobble/inflection.py carries the original Janne Vanhala 2012-2015 MIT notice. Its complete underscore function matches the official inflection 0.3.1 source verbatim; the original MIT LICENSE is carried separately.",
+    "No new permission or license exception is created by this provenance record."
+  ],
+  "licenseSource": {
+    "url": "https://opensource.org/license/bsd-2-clause",
+    "preparedTemplate": true,
+    "sha256": "1698dd919b3d30cc030f8965043ac75f4490089961dbd9b734c510279fb7d59b",
+    "bytes": 1305
+  },
+  "primaryDeclaration": {
+    "url": "https://raw.githubusercontent.com/mwilliamson/python-cobble/a4f92a3462303c1402c8c55e3b5a45fa3bc2fa37/README.rst",
+    "commit": "a4f92a3462303c1402c8c55e3b5a45fa3bc2fa37",
+    "path": "README.rst",
+    "sha256": "d6d46202db973b560d2f521dced9110b3e0a46d9a75e1428dade8b7608dd0cca",
+    "quotedDeclaration": "`2-Clause BSD <http://opensource.org/licenses/BSD-2-Clause>`_"
+  },
+  "publisherMetadata": {
+    "author": "Michael Williamson",
+    "authorEmail": "mike@zwobble.org"
+  },
+  "embeddedNotices": [
+    {
+      "path": "LICENSE-inflection-MIT",
+      "license": "MIT",
+      "copyright": "Copyright (C) 2012-2015 Janne Vanhala",
+      "sha256": "4a3f52ac1012a90db398e4c55f1d1bea501dddafef8a4b3adb7533b1d820e148",
+      "bytes": 1062,
+      "source": {
+        "url": "https://files.pythonhosted.org/packages/d5/35/a6eb45b4e2356fe688b21570864d4aa0d0a880ce387defe9c589112077f8/inflection-0.3.1.tar.gz",
+        "sha256": "18ea7fb7a7d152853386523def08736aa8c32636b047ade55f7578c4edeb16ca",
+        "member": "inflection-0.3.1/LICENSE"
+      },
+      "codeBinding": {
+        "embeddedPath": "cobble/inflection.py",
+        "embeddedSha256": "1967a2342dfae1812636d6e41b8636398f2fb94d96c20a10540faaf941d9bec1",
+        "upstreamMember": "inflection-0.3.1/inflection.py",
+        "upstreamSha256": "4fc8aeb6b4bf12f418de5ba0233c31f0ebd7cb438eef917dee3aa43510ec2307",
+        "wholeFilesEqual": false,
+        "completeUnderscoreFunctionEqual": true,
+        "originalCopyrightHeaderEqual": true
+      }
+    }
+  ],
+  "material": {
+    "path": "LICENSE",
+    "sha256": "7c74dc60c195b2c4db5e566f5de04d5029fbda57249d83def500e75c70c93e1f",
+    "bytes": 2391
+  }
+}

@@ -82,6 +82,9 @@
 #if !FileExists(MyLicensesStageDir + "\licenses\mineru\LICENSE.md")
   #error 找不到随包许可暂存目录（build\licenses-stage\licenses\mineru\LICENSE.md）。请先跑 tools\packaging\collect_licenses.py；规格 4 的判据是「MinerU 的许可全文能在安装目录里逐字找到」。
 #endif
+#if !FileExists(MyLicensesStageDir + "\INSTALLATION-TERMS.txt")
+  #error 缺少 INSTALLATION-TERMS.txt。许可收集需提供 --webview-license，生成包含 Runtime 条款和用户通知的安装许可页。
+#endif
 
 ; -------------------------------------------------------------------------------------
 ; 1 · [Setup]
@@ -110,6 +113,7 @@ OutputBaseFilename=zhilan-setup-{#MyAppVersion}{#MyOutputSuffix}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+LicenseFile={#MyLicensesStageDir}\INSTALLATION-TERMS.txt
 UninstallDisplayName={#MyAppName} {#MyAppVersion}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 ; 安装器自身的版本资源（可由 PowerShell 直接读出来核对，见证据 A3）
@@ -174,6 +178,7 @@ Source: "{#MyVendorDir}\MicrosoftEdgeWebView2RuntimeInstallerX64.exe"; Flags: do
 ; (a) 许可与声明：随包放安装目录根（Apache-2.0 §4(d) 的常规落法）
 Source: "{#MyLicensesStageDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#MyLicensesStageDir}\NOTICE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#MyLicensesStageDir}\INSTALLATION-TERMS.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; (b) licenses\ 全量随包（含 MinerU 的自定义 Apache 变体全文、Inno Setup 自身许可、机械生成的清单）
 Source: "{#MyLicensesStageDir}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; (c) 桌面默认配置：**仅当不存在时**写（规格 5 + 规格 6 的升级口径）。
@@ -398,6 +403,13 @@ var
   ResultCode: Integer;
 begin
   Result := '';
+  if WizardSilent and (ExpandConstant('{param:ACCEPTTHIRDPARTYLICENSES|0}') <> '1') then
+  begin
+    Result := '静默安装需要由用户明确接受随包第三方条款。请阅读 INSTALLATION-TERMS.txt，'
+              + '确认同意后再添加 /ACCEPTTHIRDPARTYLICENSES=1；或使用交互安装阅读许可页。';
+    Log(Result);
+    Exit;
+  end;
   Dir := TrimTrailingSlashes(ExpandConstant('{app}'));
   Log('安装目录（最终）：' + Dir);
   if not ValidateInstallDir(Dir, False, Reason) then

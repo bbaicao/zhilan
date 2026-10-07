@@ -22,8 +22,14 @@ LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
 ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
 -----
-来源：上游 jtushman/proxy_tools（master 分支）的 LICENSE.txt 原文（2026 现读抓取）；⚠️ 该原文自称 BSD License（版权 Armin Ronacher / Jonathan Tushman），而 wheel METADATA 声明 MIT——两者并存，以原文为准
+来源状态：原始许可正文与锁定版本源码已绑定；正文逐字保留。
 适用包与版本：proxy_tools 0.1.0
-用途：随包许可证全文
+固定原文：https://raw.githubusercontent.com/jtushman/proxy_tools/f82ae43524fd6d9917b0e9490c7d0394dff8d155/LICENSE.txt
+原文 SHA256：a428fb8a2e762af3eb0a6edbbb88e9b42ccfee80fd9b423958bcacf9b9abbfe4；原文字节数：1436
+官方不可变发行文件：https://files.pythonhosted.org/packages/f2/cf/77d3e19b7fabd03895caca7857ef51e4c409e0ca6b37ee6e9f7daa50b642/proxy_tools-0.1.0.tar.gz
+发行文件 SHA256：ccb3751f529c047e2d8a58440d86b205303cf0fe8146f784d1cbcd94f0a28010
+原代码明确 BSD；同版 setup.py/PKG-INFO 声明 MIT，差异原样保留，不自行替换为 MIT。
+原文中的 <COPYRIGHT HOLDER> 占位符与末句拼接异常未修改；版权原行与 BSD 全部条款均保留。
+本注记只记录材料来源；详见同目录 SOURCE.json。
+被取用的 Werkzeug 代码另见同目录 LICENSE-Werkzeug-BSD 和 NOTICE-Werkzeug-AUTHORS；完整保留原 BSD 第三条和 Werkzeug Team 版权/作者通知。

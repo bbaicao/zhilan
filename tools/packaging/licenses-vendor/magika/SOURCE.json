@@ -1,0 +1,28 @@
+{
+  "name": "magika",
+  "version": "1.0.3",
+  "checkedAt": "2026-10-07",
+  "status": "version-bound",
+  "license": "Apache-2.0",
+  "distribution": {
+    "url": "https://files.pythonhosted.org/packages/00/be/fa7d512ec15763ad7d8ba083e39bb445fa969ce5159361fa449a02569cf9/magika-1.0.3.tar.gz",
+    "filename": "magika-1.0.3.tar.gz",
+    "sha256": "ad3216012f6dd337be34c23ae3dfab36f0623bc62fbfb329f9a1852c9ad40304",
+    "bytes": 3041970
+  },
+  "notes": [],
+  "licenseSource": {
+    "url": "https://raw.githubusercontent.com/google/magika/9f225aa480e675af44343b9160f077073ed1b752/LICENSE",
+    "commit": "9f225aa480e675af44343b9160f077073ed1b752",
+    "tag": "python-v1.0.3",
+    "path": "LICENSE",
+    "sha256": "58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd",
+    "bytes": 11357,
+    "preparedTemplate": false
+  },
+  "material": {
+    "path": "LICENSE",
+    "sha256": "3518d7734feaa66ea6f67b91e9e0c8e04d18c7216a81a66a215f5a1ddc14fb1f",
+    "bytes": 12013
+  }
+}

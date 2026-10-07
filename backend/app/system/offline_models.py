@@ -18,6 +18,7 @@ MODEL_REPO = "MinerU-4_models_onnx"
 MODEL_COUNT = 13
 MODEL_BYTES = 858204914
 CHUNK_SIZE = 1024 * 1024
+NOTICE_FILES = {"MODEL-README.md", "MODEL-NOTICE.txt", "MODEL-SOURCES.json", "models-manifest.txt"}
 
 
 class ImportBusy(RuntimeError):
@@ -157,12 +158,13 @@ class OfflineModelImporter:
             manifest = self._get_manifest()
             with zipfile.ZipFile(path) as archive:
                 prefix = MODEL_REPO + "/"
-                directories = {prefix}
+                directories = {prefix, "MODEL-LICENSES/"}
                 for name in manifest:
                     pieces = name.split("/")
                     directories.update(prefix + "/".join(pieces[:i]) + "/" for i in range(1, len(pieces)))
                 entries = {}
                 seen = set()
+                notice_count = notice_bytes = 0
                 for entry in archive.infolist():
                     name = entry.filename
                     mode = entry.external_attr >> 16
@@ -180,6 +182,16 @@ class OfflineModelImporter:
                     if entry.is_dir():
                         if name not in directories:
                             raise ValueError("压缩包包含不属于本批模型的目录，已停止导入。")
+                        continue
+                    if name in NOTICE_FILES or re.fullmatch(r"MODEL-LICENSES/[A-Za-z0-9][A-Za-z0-9_.-]*\.txt", name):
+                        notice_count += 1
+                        notice_bytes += entry.file_size
+                        if (
+                            stat.S_ISDIR(mode) or entry.file_size > 256 * 1024
+                            or notice_count > 32 or notice_bytes > 2 * 1024 * 1024
+                        ):
+                            raise ValueError("压缩包的许可文档数量或长度超过上限，已停止导入。")
+                        # ponytail: notices stay in the distribution ZIP; only trusted model entries are extracted.
                         continue
                     relative = name[len(prefix):] if name.startswith(prefix) else ""
                     if (

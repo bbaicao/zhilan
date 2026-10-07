@@ -200,8 +200,11 @@
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
-
 -----
-来源：上游 google/magika（main 分支）的 LICENSE 原文（2026 现读抓取）
+来源状态：原始许可正文与锁定版本源码已绑定；正文逐字保留。
 适用包与版本：magika 1.0.3
-用途：随包许可证全文
+固定原文：https://raw.githubusercontent.com/google/magika/9f225aa480e675af44343b9160f077073ed1b752/LICENSE
+原文 SHA256：58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd；原文字节数：11357
+官方不可变发行文件：https://files.pythonhosted.org/packages/00/be/fa7d512ec15763ad7d8ba083e39bb445fa969ce5159361fa449a02569cf9/magika-1.0.3.tar.gz
+发行文件 SHA256：ad3216012f6dd337be34c23ae3dfab36f0623bc62fbfb329f9a1852c9ad40304
+本注记只记录材料来源；详见同目录 SOURCE.json。

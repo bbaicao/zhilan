@@ -43,6 +43,50 @@ def test_import_and_repeat_preserve_files(bundle):
     assert all((root / name).read_bytes() == value for name, value in contents.items())
 
 
+def test_public_bundle_carries_notices_without_changing_models(bundle):
+    service, path, root, contents = bundle
+    with zipfile.ZipFile(path, "a") as archive:
+        archive.writestr("MODEL-README.md", "Model usage and limitations")
+        archive.writestr("MODEL-NOTICE.txt", "Model copyright and modifications")
+        archive.writestr("MODEL-SOURCES.json", "{}")
+        archive.writestr("models-manifest.txt", "Model hashes")
+        archive.writestr("MODEL-LICENSES/", "")
+        archive.writestr("MODEL-LICENSES/PaddleOCR.txt", "License text")
+    service._run(path, root)
+    assert service.snapshot()["state"] == "succeeded"
+    assert service.snapshot()["imported_files"] == 2
+    assert all((root / name).read_bytes() == value for name, value in contents.items())
+    assert not (root / "MODEL-LICENSES").exists()
+    service._run(path, root)
+    assert service.snapshot()["skipped_files"] == 2
+
+
+@pytest.mark.parametrize("name,size", [
+    ("MODEL-LICENSES/extra.onnx", 1),
+    ("MODEL-LICENSES/nested/License.txt", 1),
+    ("MODEL-LICENSES/../escape.txt", 1),
+    ("MODEL-README.md", 256 * 1024 + 1),
+])
+def test_public_notice_whitelist_rejects_other_payloads(bundle, name, size):
+    service, path, root, _ = bundle
+    with zipfile.ZipFile(path, "a") as archive:
+        archive.writestr(name, b"x" * size)
+    service._run(path, root)
+    assert service.snapshot()["state"] == "failed"
+    assert not root.exists()
+
+
+@pytest.mark.parametrize("count,size", [(33, 1), (9, 256 * 1024)])
+def test_public_notices_have_bounded_count_and_total_size(bundle, count, size):
+    service, path, root, _ = bundle
+    with zipfile.ZipFile(path, "a") as archive:
+        for number in range(count):
+            archive.writestr(f"MODEL-LICENSES/license-{number}.txt", b"x" * size)
+    service._run(path, root)
+    assert service.snapshot()["state"] == "failed"
+    assert not root.exists()
+
+
 def test_last_existing_conflict_stops_before_any_write(bundle):
     service, path, root, _ = bundle
     existing = root / "Table/two.onnx"

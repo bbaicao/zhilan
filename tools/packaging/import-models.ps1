@@ -100,15 +100,46 @@ try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $archive = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
     $entries = @{}
+    $seen = @{}
+    $noticeCount = 0
+    $noticeBytes = 0L
     $prefix = 'MinerU-4_models_onnx/'
+    $directories = @($prefix, 'MODEL-LICENSES/')
+    foreach ($model in $models) {
+        $parts = $model.Path.Split('/')
+        for ($i = 1; $i -lt $parts.Length; $i++) {
+            $directories += $prefix + ($parts[0..($i - 1)] -join '/') + '/'
+        }
+    }
     foreach ($entry in $archive.Entries) {
         $name = $entry.FullName
+        $unixType = ($entry.ExternalAttributes -shr 16) -band 0xF000
         if ($name.Contains('\') -or $name.Contains(':') -or $name.StartsWith('/') -or
-            -not $name.StartsWith($prefix, [StringComparison]::Ordinal) -or
+            $name.IndexOf([char]0) -ge 0 -or $seen.ContainsKey($name) -or
+            ($entry.ExternalAttributes -band 0x400) -ne 0 -or
+            $unixType -notin @(0, 0x8000, 0x4000) -or
             @($name.Split('/') | Where-Object { $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) {
             throw '压缩包存在越界路径或不是本批官方模型结构，已停止导入。'
         }
-        if ($name.EndsWith('/')) { continue }
+        $seen[$name] = $true
+        if ($name.EndsWith('/')) {
+            if ($name -cnotin $directories) { throw '压缩包包含不属于本批模型的目录，已停止导入。' }
+            continue
+        }
+        if ($unixType -eq 0x4000) { throw '压缩包目录类型与文件路径不符，已停止导入。' }
+        if ($name -cin @('MODEL-README.md','MODEL-NOTICE.txt','MODEL-SOURCES.json','models-manifest.txt') -or
+            $name -cmatch '^MODEL-LICENSES/[A-Za-z0-9][A-Za-z0-9_.-]*\.txt$') {
+            $noticeCount++
+            $noticeBytes += $entry.Length
+            if ($entry.Length -gt 262144 -or $noticeCount -gt 32 -or $noticeBytes -gt 2097152) {
+                throw '压缩包的许可文档数量或长度超过上限，已停止导入。'
+            }
+            # ponytail: keep notices in the distribution ZIP; extract only manifest-bound model files.
+            continue
+        }
+        if (-not $name.StartsWith($prefix, [StringComparison]::Ordinal)) {
+            throw '压缩包包含不属于本批模型的额外文件，已停止导入。'
+        }
         $relative = $name.Substring($prefix.Length)
         if ($entries.ContainsKey($relative)) { throw '压缩包有重复的模型路径，已停止导入。' }
         $entries[$relative] = $entry
@@ -147,7 +178,13 @@ try {
             # CreateNew also prevents overwriting a file created after the preflight.
             $destination = [System.IO.File]::Open($target, [System.IO.FileMode]::CreateNew,
                 [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
-            $source.CopyTo($destination)
+            $buffer = New-Object byte[] (1024 * 1024)
+            $written = 0L
+            while (($read = $source.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                $written += $read
+                if ($written -gt $model.Bytes) { throw "模型解压长度超过清单上限：$($model.Path)" }
+                $destination.Write($buffer, 0, $read)
+            }
         }
         finally {
             if ($destination) { $destination.Dispose() }

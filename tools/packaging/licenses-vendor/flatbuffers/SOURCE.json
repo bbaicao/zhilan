@@ -1,0 +1,28 @@
+{
+  "name": "flatbuffers",
+  "version": "25.12.19",
+  "checkedAt": "2026-10-07",
+  "status": "version-bound",
+  "license": "Apache-2.0",
+  "distribution": {
+    "url": "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl",
+    "filename": "flatbuffers-25.12.19-py2.py3-none-any.whl",
+    "sha256": "7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4",
+    "bytes": 26661
+  },
+  "notes": [],
+  "licenseSource": {
+    "url": "https://raw.githubusercontent.com/google/flatbuffers/7e163021e59cca4f8e1e35a7c828b5c6b7915953/LICENSE",
+    "commit": "7e163021e59cca4f8e1e35a7c828b5c6b7915953",
+    "tag": "v25.12.19",
+    "path": "LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "bytes": 11358,
+    "preparedTemplate": false
+  },
+  "material": {
+    "path": "LICENSE",
+    "sha256": "5dd5ccbb400703e936405eda0776403a8c1aafc76ca1d242bbb566d7bfe3b48d",
+    "bytes": 12049
+  }
+}

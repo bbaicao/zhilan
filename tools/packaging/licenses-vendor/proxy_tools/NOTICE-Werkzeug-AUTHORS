@@ -1,0 +1,66 @@
+Werkzeug is written and maintained by the Werkzeug Team and various
+contributors:
+
+Project Leader / Developer:
+
+- Armin Ronacher <armin.ronacher@active-4.com>
+
+- Georg Brandl
+- Leif K-Brooks <eurleif@gmail.com>
+- Thomas Johansson
+- Marian Sigler
+- Ronny Pfannschmidt
+- Noah Slater <nslater@tumbolia.org>
+- Alec Thomas
+- Shannon Behrens
+- Christoph Rauch
+- Clemens Hermann
+- Jason Kirtland
+- Ali Afshar
+- Christopher Grebs <cg@webshox.org>
+- Sean Cazzell <seancazzell@gmail.com>
+- Florent Xicluna
+- Kyle Dawkins
+- Pedro Algarvio
+- Zahari Petkov
+- Ludvig Ericson
+- Kenneth Reitz
+- Daniel Neuhäuser
+
+Contributors of code for werkzeug/examples are:
+
+- Itay Neeman <itay@neeman.net>
+
+The SSL related parts of the Werkzeug development server are partially
+taken from Paste.  Same thing is true for the range support which comes
+from WebOb which is a Paste project.  The original code is MIT licensed which
+is largely compatible with the modfied BSD license.  The following copyrights
+apply:
+
+- (c) 2005 Ian Bicking and contributors
+- (c) 2005 Clark C. Evans
+
+The rename() function from the posixemulation was taken almost unmodified
+from the Trac project's utility module.  The original code is BSD licensed
+with the following copyrights from that module:
+
+- (c) 2003-2009 Edgewall Software
+- (c) 2003-2006 Jonas Borgström <jonas@edgewall.com>
+- (c) 2006 Matthew Good <trac@matt-good.net>
+- (c) 2005-2006 Christian Boos <cboos@neuf.fr>
+
+-----
+Original werkzeug/local.py header (Werkzeug 0.9.4):
+# -*- coding: utf-8 -*-
+"""
+    werkzeug.local
+    ~~~~~~~~~~~~~~
+
+    This module implements context-local objects.
+
+    :copyright: (c) 2013 by the Werkzeug Team, see AUTHORS for more details.
+    :license: BSD, see LICENSE for more details.
+"""
+
+Source: https://files.pythonhosted.org/packages/d8/5e/8abc95630f9c4248edffed30592468f884e845ba656a959a12e452fafcec/Werkzeug-0.9.4.tar.gz
+Distribution SHA256: c1baf7a3e8be70f34d931ee173283f406877bd3d17f372bbe82318a5b3c510cc

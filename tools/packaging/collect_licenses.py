@@ -13,6 +13,10 @@
 `zhilan.spec` 的显式 `excludes`。这里不读取 PyInstaller 模块图或实际成品，因此不能
 证明列出的包都已随包，也不能证明实际分发组件全集已覆盖。锁定清单里的构建期包
 （如 `pyinstaller` / `setuptools`）若未被显式排除，也可能出现在收集清单中。
+前端按 `frontend/package-lock.json` 保守收下全部非 dev 的 npm 依赖（含传递依赖和
+类型包）；逐件要求本地 package.json 名称/版本与锁一致，并携带实际版权/许可全文。
+版本漂移、缺包或缺全文都会中止；来源、锁与全文哈希写入 npm 清单。这不是 bundle
+模块图证明，旧成品必须另行核对实际构建版本，不能用当前源码锁代替旧成品身份。
 
 **判据不是「文件数」**（规格 4 原文）：而是① **MinerU 的 `LICENSE.md` 全文能在安装目录里
 逐字找到**（自定义 Apache 变体，**不可用通用文本替代**）、② 文件头能被打开读。
@@ -22,16 +26,17 @@ sha256 与已知值一致；PASS 仅代表这些硬断言成立。其他无全�
 
 **vendor 回退（回归修复）**：有 9 个依赖的 wheel 内不含许可全文（dist-info 与包目录都没有），
 只有 METADATA 里的一句声明。这 9 件的许可材料由人工存进仓库
-`tools/packaging/licenses-vendor/<包名>/LICENSE`（每份末尾附来源注记）；其中 cobble
-是依据上游声明整理的 BSD 模板，其余记录为上游文本，不能把九件全称为上游原文。
-master/main 来源尚未逐件绑定不可变版本，proxy_tools 的原文与 wheel 声明差异也须核对。
+`tools/packaging/licenses-vendor/<包名>/`。历史 cobble 人工模板、浮动分支来源与
+proxy_tools 声明冲突不能靠复制文件解决；当前对应版本来源与未解决状态见
+各包 SOURCE.json（如有），不能把九件全称为已核准上游原文。
 本脚本遇到「无全文」的包
-先查 vendor 目录，命中即把全文随包（`licenses\\<包名>\\LICENSE`），METADATA 声明文件仍一并写出作佐证。
+先查 vendor 目录，命中即把许可相关文件与 SOURCE.json 一并随包，
+METADATA 声明文件仍一并写出作佐证；嵌入的第三方许可也保留，不合并成模板。
 本脚本自身依旧**零出网**——来源整理是人工动作，不在构建流程里。已有输出中的
-「上游全文」为旧标签，具体来源以每份注记为准；本次仅更正文档，不改生成逻辑。
+「上游全文」为旧标签；本脚本的复制成功不等于 vendor 对应版本来源已通过。
 
 纪律（同 `6.4` 的 `models_manifest.py`）：**stdlib only**、**零出网**、**零子进程**、
-只读 `site-packages` 与仓库内文本，**绝不碰仓库 `.env`**（含真实密钥）。
+只读 `site-packages`、前端依赖与仓库内文本，**绝不碰仓库 `.env`**（含真实密钥）。
 
 用法：
     python tools/packaging/collect_licenses.py \\
@@ -45,6 +50,8 @@ master/main 来源尚未逐件绑定不可变版本，proxy_tools 的原文与 w
     licenses\\Inno-Setup-license.txt       ← 安装器自身的许可全文（裁决 8）
     licenses\\00-许可证清单.txt            ← 机械生成的索引（含每件 sha256 与来源），供逐项核对
     licenses\\<包名>\\<相对路径>            ← 各随包组件的许可全文
+    licenses\\npm\\<依赖路径>\\<许可文件>    ← 前端实际锁定版本的版权与许可全文
+    licenses\\npm\\00-package-manifest.json ← 前端版本、来源、文件和锁 SHA256
 """
 
 from __future__ import annotations
@@ -52,6 +59,7 @@ from __future__ import annotations
 import argparse
 import ast
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -237,6 +245,72 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def collect_frontend(frontend_dir: Path, licenses_dir: Path) -> list[tuple[str, str, str, int]]:
+    """保守收全部 npm runtime 锁项；缺全文/版本漂移拒绝，不拼通用许可模板。"""
+    lock_file = frontend_dir / "package-lock.json"
+    lock = json.loads(lock_file.read_text(encoding="utf-8"))
+    packages = lock.get("packages", {})
+    if lock.get("lockfileVersion", 0) < 2 or not packages.get("", {}).get("dependencies"):
+        raise SystemExit("[licenses] 前端锁必须含 v2/v3 packages 与根 runtime dependencies")
+    # ponytail: 使用 npm 的 dev 标记收全 runtime 子树，可能多收类型包；精确缩减需 bundle 模块图。
+    runtime = {key: value for key, value in packages.items()
+               if key and not value.get("dev") and not value.get("devOptional")}
+    if any(f"node_modules/{name}" not in runtime for name in packages[""]["dependencies"]):
+        raise SystemExit("[licenses] 前端锁缺少根 runtime 依赖")
+    records, copies = [], []
+    for key, entry in sorted(runtime.items()):
+        rel_dir = Path(key)
+        if not key.startswith("node_modules/") or "\\" in key or any(
+            part in (".", "..") or ":" in part for part in key.split("/")
+        ):
+            raise SystemExit(f"[licenses] 非法 npm 依赖路径：{key}")
+        package_dir = frontend_dir / rel_dir
+        meta_file = package_dir / "package.json"
+        if (not package_dir.resolve().is_relative_to(frontend_dir.resolve())
+                or not meta_file.resolve().is_relative_to(package_dir.resolve())):
+            raise SystemExit(f"[licenses] npm 包路径越界：{key}")
+        if not meta_file.is_file():
+            raise SystemExit(f"[licenses] npm 缺包：{key}")
+        meta = json.loads(meta_file.read_text(encoding="utf-8"))
+        name = entry.get("name", key.rsplit("node_modules/", 1)[-1])
+        version = entry.get("version")
+        if not version or meta.get("name") != name or meta.get("version") != version:
+            raise SystemExit(f"[licenses] npm 名称/版本不符：{key} 锁={name}@{version} "
+                             f"实测={meta.get('name')}@{meta.get('version')}")
+        files = [(src, src.relative_to(package_dir)) for src, _ in _iter_license_files(package_dir)]
+        if any(not src.resolve().is_relative_to(package_dir.resolve()) for src, _ in files):
+            raise SystemExit(f"[licenses] npm 许可路径越界：{key}")
+        # NOTICE/COPYRIGHT 单独存在不能冒充许可全文；空白文件也不是全文。
+        if not any(src.name.lower().startswith(("license", "licence", "copying"))
+                   and src.read_bytes().strip() for src, _ in files):
+            raise SystemExit(f"[licenses] npm 缺许可全文：{name}@{version}")
+        prefix = Path("npm") / Path(key.removeprefix("node_modules/"))
+        material = []
+        for src, rel in files:
+            dest_rel = prefix / rel
+            material.append({"path": dest_rel.as_posix(),
+                             "source": f"frontend/{key}/{src.relative_to(package_dir).as_posix()}",
+                             "sha256": _sha256(src), "bytes": src.stat().st_size})
+            copies.append((src, dest_rel))
+        records.append({"name": name, "version": version, "lock_path": key,
+                        "declared_license": meta.get("license", entry.get("license", "")),
+                        "resolved": entry.get("resolved", ""), "integrity": entry.get("integrity", ""),
+                        "package_json_sha256": _sha256(meta_file), "files": material})
+    # 全部校验后才复制，避免缺件时留下可被误用的部分 npm 输出。
+    rows = []
+    for src, rel in copies:
+        dest = licenses_dir / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(src.read_bytes())
+        rows.append(("npm", rel.relative_to("npm").as_posix(), _sha256(dest), dest.stat().st_size))
+    manifest = {"scope": "全部非 dev npm 锁项；保守包含 runtime 的传递依赖与类型包，非 bundle 模块图",
+                "package_lock_sha256": _sha256(lock_file), "packages": records}
+    dest = licenses_dir / "npm" / "00-package-manifest.json"
+    dest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    rows.append(("npm", dest.name, _sha256(dest), dest.stat().st_size))
+    return rows
+
+
 def collect(  # noqa: PLR0913 —— 参数各自独立，聚合进一个对象反而更难读
     site_packages: Path,
     lock_file: Path,
@@ -244,6 +318,8 @@ def collect(  # noqa: PLR0913 —— 参数各自独立，聚合进一个对象�
     spec_file: Path,
     inno_license: Path | None,
     vendor_note: str = "",
+    frontend_dir: Path | None = None,
+    webview_license: Path | None = None,
 ) -> int:
     if not site_packages.is_dir():
         raise SystemExit(f"[licenses] site-packages 不存在：{site_packages}")
@@ -256,7 +332,7 @@ def collect(  # noqa: PLR0913 —— 参数各自独立，聚合进一个对象�
     excluded = _parse_spec_excludes(spec_file)
     effective = {name for name in wanted if name not in excluded}
 
-    rows: list[tuple[str, str, str, int]] = []  # (包名, 相对路径, sha256, 字节数)
+    rows = collect_frontend(frontend_dir or REPO_ROOT / "frontend", licenses_dir)
     dist_infos = sorted(p for p in site_packages.glob("*.dist-info") if p.is_dir())
     skipped_packages: list[str] = []
     declared_only: list[tuple[str, str]] = []  # (包名, METADATA 里声明的许可)；**如实登记，不假装收全**
@@ -280,17 +356,23 @@ def collect(  # noqa: PLR0913 —— 参数各自独立，聚合进一个对象�
             vendor_src = _vendor_license_file(name)
             if vendor_src is not None:
                 # wheel 无全文但 vendor 命中：随包复制许可材料，实际来源以文件末尾注记为准。
-                dest = licenses_dir / name / "LICENSE"
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(vendor_src.read_bytes())
-                rows.append((name, dest.name, _sha256(dest), dest.stat().st_size))
+                for vendor_file, rel in _iter_license_files(vendor_src.parent):
+                    dest = licenses_dir / name / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_bytes(vendor_file.read_bytes())
+                    rows.append((name, rel.as_posix(), _sha256(dest), dest.stat().st_size))
+                provenance = vendor_src.with_name("SOURCE.json")
+                if provenance.is_file():
+                    source_dest = licenses_dir / name / "SOURCE.json"
+                    source_dest.write_bytes(provenance.read_bytes())
+                    rows.append((name, source_dest.name, _sha256(source_dest), source_dest.stat().st_size))
                 vendored.append((name, _declared_license_label(dist_info)))
                 if declared:
                     note = (
                         f"本发行版的 wheel 里没有许可全文文件（dist-info 与包目录都没有）。\n"
                         f"它自己声明的许可是：{declared}\n"
-                        f"上游许可全文已随包携带：licenses/{name}/LICENSE（取自仓库 licenses-vendor 目录，回归修复）。\n"
-                        f"——此文件由 tools/packaging/collect_licenses.py 生成，只作声明佐证；全文以上述 LICENSE 为准。\n"
+                        f"仓内 vendor 材料已随包携带：licenses/{name}/LICENSE。\n"
+                        f"——此文件只作声明佐证；对应版本来源、全文与状态须另核，不代表已通过许可审查。\n"
                     )
                     note_dest = licenses_dir / name / "METADATA-授权声明.txt"
                     note_dest.parent.mkdir(parents=True, exist_ok=True)
@@ -322,6 +404,34 @@ def collect(  # noqa: PLR0913 —— 参数各自独立，聚合进一个对象�
             raise SystemExit(f"[licenses] 找不到 Inno Setup 的 license.txt：{inno_license}")
         (licenses_dir / "Inno-Setup-license.txt").write_bytes(inno_license.read_bytes())
 
+    if webview_license is not None:
+        raw = webview_license.read_bytes()
+        text = raw.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n")
+        if not 500 <= len(raw) <= 262144 or not all(marker in text for marker in (
+            "MICROSOFT EDGE WEBVIEW2 RUNTIME", "DISTRIBUTABLE CODE", "SmartScreen",
+        )):
+            raise SystemExit("[licenses] WebView2 输入不是完整的 Runtime 分发条款")
+        dest = licenses_dir / "Microsoft-WebView2-Runtime" / "LICENSE.txt"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(raw)
+        rows.append(("Microsoft-WebView2-Runtime", "LICENSE.txt", _sha256(dest), len(raw)))
+        header = (
+            "知澜安装许可与第三方运行时说明\n\n"
+            "知澜原创源码采用 Apache-2.0；各第三方组件继续适用各自许可。\n"
+            "安装前请阅读下方 Microsoft WebView2 Runtime 和 MinerU 的完整条款。\n"
+            "选择接受表示同意所安装的第三方组件适用这些条款，不改变知澜源码的许可。\n\n"
+            "知澜使用的 WebView2 包含 Microsoft Defender SmartScreen，默认启用时会收集"
+            "并发送用户信息给 Microsoft，详见下方第3及第9条和其中的隐私声明。\n"
+            "运行时会自动更新；Windows 7/8.1 上可能定期检查、下载并安装更新而不再另行通知。\n"
+            "MinerU 的许可含指定规模商业使用授权及线上服务标识条件，请阅读实际全文。\n\n"
+            "===== Microsoft WebView2 Runtime 原始条款 =====\n\n"
+        )
+        terms = header + text + "\n\n===== MinerU 原始许可 =====\n\n"
+        terms += (licenses_dir / "mineru" / "LICENSE.md").read_text(encoding="utf-8")
+        (out_dir / "INSTALLATION-TERMS.txt").write_text(
+            terms, encoding="utf-8-sig", newline="\n"
+        )
+
     # 硬断言：三件必须在，且 MinerU 那件逐字相同
     problems: list[str] = []
     for rel, expected in MUST_HAVE:
@@ -343,18 +453,22 @@ def collect(  # noqa: PLR0913 —— 参数各自独立，聚合进一个对象�
         "来源环境  ：构建环境的 site-packages",
         "依赖锁定  ：tools/packaging/requirements-lock.txt",
         "排除规则  ：tools/packaging/zhilan.spec 的 excludes（不进入产物的组件不收集许可）",
-        f"锁定件数  ：{len(wanted)}；排除件数：{len(excluded)}；实际收集包数：{len({r[0] for r in rows})}",
+        "前端范围  ：非 dev npm 锁项全部携带；名称/版本与 package.json 一致，缺全文中止；"
+        "版本/来源/锁/全文哈希见 npm/00-package-manifest.json（不是 bundle 模块图证明）",
+        f"Python锁定件数：{len(wanted)}；排除件数：{len(excluded)}；"
+        f"Python材料包数：{len({r[0] for r in rows if r[0] not in ('npm', 'Microsoft-WebView2-Runtime')})}；"
+        "npm各版本见上述JSON清单；Microsoft Runtime 独立列出",
         "",
         f"被 excludes 摘掉、且确实装在 site-packages 里、因而不收集许可的包（{len(skipped_packages)}）："
         f"{', '.join(skipped_packages) or '（无）'}",
         "",
         f"⚠️ wheel 内无许可全文的包（{len(vendored) + len(declared_only)}）："
-        f"vendor 已随包携带上游全文 {len(vendored)} 个，仍未覆盖 {len(declared_only)} 个：",
+        f"vendor 仓内材料已携带 {len(vendored)} 个，仍无材料 {len(declared_only)} 个：",
         *(
             [
-                f"    {name}  →  已随包携带上游全文（vendor）：licenses/{name}/LICENSE（{label}）"
+                f"    {name}  →  仓内 vendor 材料：licenses/{name}/LICENSE（wheel声明：{label}）"
                 if label
-                else f"    {name}  →  已随包携带上游全文（vendor）：licenses/{name}/LICENSE"
+                else f"    {name}  →  仓内 vendor 材料：licenses/{name}/LICENSE"
                 for name, label in vendored
             ]
             + [
@@ -363,8 +477,8 @@ def collect(  # noqa: PLR0913 —— 参数各自独立，聚合进一个对象�
             ]
             or ["    （无）"]
         ),
-        "    说明：vendor 文本取自仓库 tools/packaging/licenses-vendor/<包名>/LICENSE（上游原文，末尾附来源注记）。",
-        "    仍未覆盖的件仅有 METADATA 声明；分发前必须补齐其许可全文并重新核对。",
+        "    说明：vendor 材料来自仓库；对应版本、原文与状态以来源证据另行核验，复制成功不等于许可链已通过。",
+        "    仍无材料的件仅有 METADATA 声明；分发前必须补齐其许可全文并重新核对。",
         "",
         "═══ 逐件清单（相对 <安装目录>\\licenses\\）═══",
     ]
@@ -391,10 +505,12 @@ def collect(  # noqa: PLR0913 —— 参数各自独立，聚合进一个对象�
 
     print("[licenses] 知澜 · 随包许可收集")
     print(f"[licenses] site-packages ：{site_packages}")
-    print(f"[licenses] 锁定 {len(wanted)} 件 / excludes 摘掉 {len(excluded)} 件 / 实收 {len({r[0] for r in rows})} 个包")
+    print(f"[licenses] Python锁定 {len(wanted)} 件 / excludes 摘掉 {len(excluded)} 件 / "
+          f"Python材料实收 {len({r[0] for r in rows if r[0] not in ('npm', 'Microsoft-WebView2-Runtime')})} "
+          "个包；npm版本见JSON清单；Microsoft Runtime 独立列出")
     print(f"[licenses] 许可文件 {len(rows)} 个 + LICENSE + NOTICE + Inno-Setup-license.txt + 清单")
     print(f"[licenses] 暂存目录：{out_dir}")
-    print(f"[licenses] vendor 随包携带上游全文 {len(vendored)} 个："
+    print(f"[licenses] vendor 仓内材料携带 {len(vendored)} 个（来源状态另核）："
           f"{', '.join(name for name, _ in vendored) or '（无）'}")
     print(f"[licenses] 仍只登记 METADATA 声明（无全文）的包 {len(declared_only)} 个："
           f"{', '.join(name for name, _ in declared_only) or '（无）'}")
@@ -405,7 +521,8 @@ def collect(  # noqa: PLR0913 —— 参数各自独立，聚合进一个对象�
             print(f"[FAIL] {item}")
         print("[licenses] 结论：失败（判据不成立，安装包不得构建）")
         return 1
-    print("[licenses] 结论：PASS —— MinerU LICENSE.md 全文在内且 sha256 与源件一致")
+    print("[licenses] 结论：PASS —— MinerU 全文字节一致，npm runtime 锁项版本匹配且许可全文在内；"
+          "其他分发组件覆盖与 vendor 来源边界仍须核对")
     return 0
 
 
@@ -427,6 +544,10 @@ def main() -> int:
     parser.add_argument("--out", default=str(REPO_ROOT / "build" / "licenses-stage"), help="暂存目录")
     parser.add_argument("--inno-license", default=None, help="Inno Setup 的 license.txt 路径")
     parser.add_argument("--vendor-note", default="", help="写进清单末尾的一行说明")
+    parser.add_argument("--frontend-dir", default=str(REPO_ROOT / "frontend"),
+                        help="实际构建对应的前端目录，须含 package-lock.json 与匹配的 node_modules")
+    parser.add_argument("--webview-license", default=None,
+                        help="Microsoft 官方 Runtime 分发条款UTF-8全文；提供后生成安装器许可页")
     args = parser.parse_args()
     return collect(
         site_packages=Path(args.site_packages),
@@ -435,6 +556,8 @@ def main() -> int:
         spec_file=Path(args.spec_file),
         inno_license=Path(args.inno_license) if args.inno_license else None,
         vendor_note=args.vendor_note,
+        frontend_dir=Path(args.frontend_dir),
+        webview_license=Path(args.webview_license) if args.webview_license else None,
     )
 
 

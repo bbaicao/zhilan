@@ -26,7 +26,8 @@ Distribution notices
 --------------------
 tools/packaging/collect_licenses.py collects the license texts for the
 Windows distribution from the build environment, the packaging
-specification and the vendored license texts under
+specification, the version-matched frontend npm dependency lock, and
+the vendored license texts under
 tools/packaging/licenses-vendor/. Its generated inventory records the
 component names, license sources and hashes. It is derived from the build
 environment, dependency lock and packaging exclusions, rather than the
@@ -37,16 +38,30 @@ Consult that generated directory for the collected license materials and
 verify them against the actual distribution. The collector's PASS covers
 its explicit file and hash assertions, not complete license compliance.
 
-The vendored texts retain their provenance notes. The cobble text is a
-BSD template prepared from upstream declarations, not a retrieved
-upstream license file. Other notes referring to master/main are not yet
-bound to immutable source revisions for each listed package version.
-The proxy_tools upstream text and wheel declaration differ; the retained
-text also contains an unusual concatenation. These require further
-version-specific source verification before claiming complete coverage.
+The nine vendored components have SOURCE.json records for the exact
+package versions, official distribution hashes, license sources and
+material hashes. Seven primary license texts are bound to immutable
+version-specific source revisions. The proxy_tools primary text is bound
+to the source revision preceding its 0.1.0 publication; that source and
+license state BSD while the same distribution's metadata states MIT.
+Its original placeholder and unusual concatenation are retained.
+
+The cobble 0.1.4 README declares BSD-2-Clause, but that release has no
+primary LICENSE or primary copyright line. Its supplied BSD text is an
+explicitly prepared template with placeholders, not an upstream original
+or an invented copyright claim. The actual inflection-derived code's
+Janne Vanhala copyright and MIT license are supplied separately.
+proxy_tools also includes the original Werkzeug BSD-3-Clause license
+and author notice for the code it extracts. These provenance limits and
+metadata differences remain visible; collection does not resolve them.
 
 Model weights are distributed separately from this source repository.
 tools/packaging/models-manifest.txt records the expected ONNX files,
 sizes and hashes. A file hash is an integrity check, not a license grant;
 redistribution also requires the terms and provenance of the exact model
 files. Model terms are not covered by this project's Apache-2.0 license.
+The separate public model ZIP contains thirteen unchanged model/config
+files and eleven accompanying documents: fixed-revision source records,
+original model cards, the Apache-2.0 text and modification notices.
+The official collection includes a third-party Formula configuration;
+its independent source declaration is preserved in MODEL-SOURCES.json.

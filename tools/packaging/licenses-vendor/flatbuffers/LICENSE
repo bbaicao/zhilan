@@ -202,6 +202,10 @@
    limitations under the License.
 
 -----
-来源：上游 google/flatbuffers（master 分支）的 LICENSE 原文（2026 现读抓取）
+来源状态：原始许可正文与锁定版本源码已绑定；正文逐字保留。
 适用包与版本：flatbuffers 25.12.19
-用途：随包许可证全文
+固定原文：https://raw.githubusercontent.com/google/flatbuffers/7e163021e59cca4f8e1e35a7c828b5c6b7915953/LICENSE
+原文 SHA256：cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30；原文字节数：11358
+官方不可变发行文件：https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl
+发行文件 SHA256：7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4
+本注记只记录材料来源；详见同目录 SOURCE.json。

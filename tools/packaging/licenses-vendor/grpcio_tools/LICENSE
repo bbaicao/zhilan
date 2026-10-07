@@ -623,6 +623,10 @@ Exhibit B - "Incompatible With Secondary Licenses" Notice
   defined by the Mozilla Public License, v. 2.0.
 
 -----
-来源：上游 grpc/grpc（master 分支）的 LICENSE 原文（2026 现读抓取；正文 = Apache-2.0 + grpc 附加条款）
+来源状态：原始许可正文与锁定版本源码已绑定；正文逐字保留。
 适用包与版本：grpcio_tools 1.84.0
-用途：随包许可证全文
+固定原文：https://raw.githubusercontent.com/grpc/grpc/3252a89f10d8e92997862167ca7d095ecda85973/LICENSE
+原文 SHA256：58c86a3f2b5cca0ebdf9ed3e7f4e6dc38e3b38796d8c3dc92064c62a4e39d0dd；原文字节数：30191
+官方不可变发行文件：https://files.pythonhosted.org/packages/cd/db/a5dba38d7ff7711d1ad05f2b43751bd0e9f234fae7c89df1846a9de034f9/grpcio_tools-1.84.0.tar.gz
+发行文件 SHA256：210ac5ac9803569490ec33574b7e995bc087815b00d9b777e0134cab5ed9a379
+本注记只记录材料来源；详见同目录 SOURCE.json。

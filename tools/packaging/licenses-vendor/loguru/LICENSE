@@ -21,6 +21,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 -----
-来源：上游 Delgan/loguru（master 分支）的 LICENSE 原文（2026 现读抓取）
+来源状态：原始许可正文与锁定版本源码已绑定；正文逐字保留。
 适用包与版本：loguru 0.7.3
-用途：随包许可证全文
+固定原文：https://raw.githubusercontent.com/Delgan/loguru/ae3bfd1b85b6b4a3db535f69b975687c79498be4/LICENSE
+原文 SHA256：b35d026cc7aca9d5859a02eb87ddf7a386a24c986838651bd1f283f94e003327；原文字节数：1056
+官方不可变发行文件：https://files.pythonhosted.org/packages/3a/05/a1dae3dffd1116099471c643b8924f5aa6524411dc6c63fdae648c4f1aca/loguru-0.7.3.tar.gz
+发行文件 SHA256：19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6
+本注记只记录材料来源；详见同目录 SOURCE.json。
