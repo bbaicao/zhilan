@@ -1,0 +1,75 @@
+# 项目名必须显式声明：compose 默认从目录名推导，若仓库克隆在含非 ASCII 字符的路径下，
+# 推导出的项目名可能为空 → 直接报 "project name must not be empty"，
+# 导致 `docker compose up` 完全不可用。写死 ASCII 项目名即可。
+name: zhilan
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: zhilan-mysql
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:13306:3306"
+    environment:
+      TZ: Asia/Shanghai
+      # 默认 changeme 仅供本地开发；使用前设置 MYSQL_ROOT_PASSWORD、MYSQL_USER、MYSQL_PASSWORD。
+      # 应用的本机 .env 也需配置一致的用户和口令，部署说明见 CONFIGURATION.md。
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme}
+      # 库名与 .env / backend/app/core/config.py 的 MYSQL_DATABASE 保持一致（zhilan_v2），否则迁移连不上。
+      MYSQL_DATABASE: zhilan_v2
+      MYSQL_USER: ${MYSQL_USER:-changeme}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      # 自检口令必须与上面的 MYSQL_ROOT_PASSWORD 同一个变量，否则默认口令与自检口令会不一致
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-changeme}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: zhilan-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:16379:6379"
+    environment:
+      TZ: Asia/Shanghai
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  qdrant:
+    # 当前服务定义使用 Qdrant v1.12.5；拉取和部署需自行核对网络、端口与持久化目录。
+    image: qdrant/qdrant:v1.12.5
+    container_name: zhilan-qdrant
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:16333:6333"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  mysql_data:
+  redis_data:
+  qdrant_data:

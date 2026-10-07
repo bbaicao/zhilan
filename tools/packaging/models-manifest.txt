@@ -1,0 +1,23 @@
+# 知澜 · 离线模型包完整性清单（阶段 6 · 条目 6.4 交付物 2）
+# 来源仓库：OpenDataLab/MinerU-4_models_onnx（官方件）
+# 生成时间：2026-09-20T19:44:26+08:00
+# 生成命令：python tools/packaging/models_manifest.py gen --root <模型根> --out tools/packaging/models-manifest.txt
+# 校验命令：python tools/packaging/models_manifest.py verify --root <模型根> --manifest tools/packaging/models-manifest.txt
+#
+# 声明：本清单**只覆盖官方 ONNX 件**，不含任何 .gguf、不含 mineru_llama_cpp、
+#       不含第三方再分发件（依据 Q2-a 与 当前模型包范围）。
+# 件数：13 件；总字节：858204914
+# 格式：<sha256><两个空格><相对路径><两个空格><字节数>（相对路径相对于模型根）
+cd540dc296ff3115fe78efa65b68501e6a8dc74b198acc9834a725ffaa095aac  Layout/PP-DocLayoutV2/inference.onnx  213963712
+93100e0fb2cd76b9d246a853deea85e191d8333b2cfca7be76e82e4c4ebfa819  Layout/PP-DocLayoutV2/inference.yml  1482
+20a32595c2b30282dcd069e6295e9fad96115697beb66acb9b681b814006d193  MFR/pp_formulanet_plus_m/PP-FormulaNet_plus-M.onnx  591263297
+87b5f3d7f2b2fe553627d77b37f496608ca150ebd0ef62d362591edca47b5538  MFR/pp_formulanet_plus_m/PP-FormulaNet_plus-M_inference.yml  2244564
+5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634  OCR/paddleocr/ch_PP-OCRv6_small_rec_infer.onnx  21159378
+c0541b06832948d7d3052e9ac6b572c6063d79ecd800493f4ec14d1b901c16d7  OCR/paddleocr/ch_PP-OCRv6_small_rec_inference.yml  150752
+193bab7a04fca699a6c82e6abb5b81bdb28177f0abd4062552b04908dafb19f8  OCR/paddleocr/ch_PP-OCRv6_tiny_det_infer.onnx  1780590
+a1fa68ab31e29252936328e728633180908f997023d9eacb81f175e326676554  OCR/paddleocr/ch_PP-OCRv6_tiny_det_inference.yml  1068
+3e190df84542c2756975febe8f73603b587a23c7f7badfdd3fc8a986540d5bc0  OCR/paddleocr/seal_PP-OCRv4_det_infer.onnx  4769171
+e5b8dd5a727602bdd526d9db152cc767bc761198c453460df7c8f7ae59d2ea3c  OCR/paddleocr/seal_PP-OCRv4_det_inference.yml  711
+c84bf1d79c1c74d534b5b12adb14dd12151c42f7ae3e4be4f1042b830f80b949  Table/PP-LCNet_x1_0_table_cls.onnx  6776877
+d57a942af6a2f57d6a4a0372573c696a2379bf5857c45e2ac69993f3b334514b  Table/slanet-plus.onnx  7758305
+0ea48d3a17e35ef5c2e498a5e799566073234d39b1079ca21d9f4fafe73c6d20  Table/unet.onnx  8335007

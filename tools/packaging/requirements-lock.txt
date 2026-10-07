@@ -1,0 +1,187 @@
+# 知澜 v2 · 打包环境依赖锁定（阶段 6 · 条目 6.3 交付物 4）
+#
+# 生成日期  ：2026-09-18
+# Python 版本：3.13.14（与目标机同一大版本 3.13）
+# 来源环境  ：E:\zhilan-pkg-venv（构建专用 venv，与开发 venv backend\.venv 隔离）
+
+# 用途：本文件是「可复跑」的**可验证定义**——发布包只能由上面这个环境、按本文件锁定的
+#       版本构建；任何版本浮动都必须先回写本文件再构建。构建脚本 build.ps1 会先核对本
+#       文件与当前环境的 pip freeze 是否逐字一致，不一致即中止（见该脚本 -SkipDriftCheck）。
+
+# 复现命令（只读，不改动该 venv）：
+#   <构建专用 venv>/Scripts/python.exe -m pip freeze
+# 对照命令：
+#   pwsh -File tools/packaging/build.ps1        # 内部自动核对
+
+# ⚠️ 关键 pin：PyMySQL==1.2.0（**不要动**）
+#   2026-09-18 实测：该 venv 原装的 PyMySQL 元数据报「1.2.2」而 site-packages 实际代码是 2.2.8
+#   （pymysql\__init__.py 里 VERSION=(1,2,2,'final') 与 version_info=(2,2,8,...) 互相矛盾），
+#   而 2.2.8 删除了 pymysql.converters.escape_bytes_prefixed —— aiomysql 0.3.2 仍在 import 该符号，
+#   导致 backend\app\db\session.py 于 import 期执行 create_async_engine 时抛 ImportError，
+#   于是 `import main` 直接失败（**源码态与冻结态 exe 都炸**）。开发 venv 是 1.2.0 且 601 tests 全过。
+#   处置：pin 回与开发环境一致的 1.2.0，并自证下列命令打印 AIOMYSQL_OK：
+#     <构建专用 venv>/Scripts/python.exe -c "import aiomysql, pymysql, sqlalchemy; print('AIOMYSQL_OK')"
+#   对应：阶段6 §八 R12（构建环境依赖漂移）与 §七 纪律 2 第 6 条。
+
+aiofiles==25.1.0
+aiomysql==0.3.2
+aiosqlite==0.22.1
+alembic==1.20.0
+altgraph==0.17.5
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anthropic==1.6.0
+anyio==4.15.1
+attrs==26.1.0
+audioop-lts==0.2.2
+beautifulsoup4==4.15.0
+bottle==0.13.4
+brotli==1.2.0
+certifi==2026.7.22
+cffi==2.1.1
+charset-normalizer==3.5.1
+click==8.5.0
+clr_loader==0.3.1
+cobble==0.1.4
+colorama==0.4.6
+cryptography==50.0.1
+cubeloop==0.14.1
+distro==1.9.0
+docstring_parser==0.18.0
+docvortex==0.4.9
+et_xmlfile==2.0.0
+fastapi==0.141.1
+filelock==4.0.0
+flatbuffers==25.12.19
+fonttools==4.65.0
+fsspec==2026.7.0
+ftfy==6.3.1
+gradio==6.27.0
+gradio_client==2.7.0
+greenlet==3.5.6
+groovy==0.1.2
+grpcio==1.84.0
+grpcio-tools==1.84.0
+h11==0.16.0
+h2==4.4.1
+hf-gradio==0.4.1
+hf-xet==1.6.0
+hpack==4.2.0
+httpcore==1.0.9
+httpcore2==2.13.0
+httptools==0.8.0
+httpx==0.28.1
+httpx-retries==0.6.0
+httpx2==2.13.0
+huggingface_hub==1.32.0
+hyperframe==6.1.0
+idna==3.19
+iniconfig==2.3.0
+jieba==0.42.1
+Jinja2==3.1.6
+jiter==0.17.0
+json_repair==0.63.4
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+latex2mathml==3.81.1
+loguru==0.7.3
+lxml==6.1.3
+magika==1.0.3
+Mako==1.4.1
+mammoth==1.12.2
+markdown-it-py==4.2.0
+MarkupSafe==3.0.3
+mathml2omml==0.0.2
+mcp==2.2.0
+mcp-types==2.2.0
+mdurl==0.1.2
+metafile-render==0.3.0
+mineru==4.0.0
+mineru-llama-cpp==0.1.2
+mineru_vl_utils==2.0.4
+modelscope==1.40.1
+modelscope-hub==0.4.3
+msgpack==1.2.2
+nh3==0.3.7
+numpy==2.5.3
+olefile==0.47
+onnxruntime==1.30.0
+openai==2.54.0
+opencv-python==5.0.0.93
+openpyxl==3.1.5
+opentelemetry-api==1.44.0
+orjson==3.12.0
+packaging==26.3
+pandas==3.0.5
+pefile==2024.8.26
+pillow==12.3.0
+pluggy==1.6.0
+portalocker==2.10.1
+protobuf==7.36.1
+proxy_tools==0.1.0
+pyclipper==1.4.0
+pycparser==3.0
+pydantic==2.13.5
+pydantic-settings==2.15.0
+pydantic_core==2.46.5
+pydub==0.25.1
+Pygments==2.21.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.7
+PyJWT==2.14.0
+pylatexenc==2.11
+PyMySQL==1.2.0
+pypdf==6.19.0
+pypdfium2==5.13.0
+pypptx-with-oxml==1.0.3
+pytest==9.1.1
+pytest-asyncio==1.4.0
+python-dateutil==2.9.0.post0
+python-docx==1.2.0
+python-dotenv==1.2.3
+python-multipart==0.0.32
+python-pptx==1.0.2
+pythonnet==3.1.0
+pytz==2026.3.post1
+pywebview==6.2.1
+pywin32==312
+pywin32-ctypes==0.2.3
+PyYAML==6.0.3
+qdrant-client==1.12.2
+redis==8.1.0
+referencing==0.37.0
+reportlab==5.0.1
+requests==2.34.2
+resvg_py==0.5.0
+rich==15.0.0
+rl_accel==0.9.1
+rpds-py==2026.6.3
+safehttpx==0.1.7
+semantic-version==2.10.0
+setuptools==84.0.0
+shapely==2.1.2
+shellingham==1.5.4
+six==1.17.0
+sniffio==1.3.1
+soupsieve==2.9.2
+SQLAlchemy==2.0.54
+sse-starlette==3.4.11
+starlette==1.6.0
+tokenizers==0.23.2
+tomlkit==0.14.0
+tqdm==4.70.1
+truststore==0.10.4
+typer==0.27.2
+typing-inspection==0.4.4
+typing_extensions==4.16.0
+tzdata==2026.4
+urllib3==2.8.0
+uvicorn==0.53.0
+watchfiles==1.2.0
+wcwidth==0.8.3
+websockets==17.1
+win32_setctime==1.2.0
+xlrd==2.0.2
+xlsxwriter==3.2.9
+ziafont==0.11
+ziamath==0.13

@@ -1,0 +1,27 @@
+fastapi
+uvicorn[standard]
+pydantic>=2
+pydantic-settings
+httpx
+pytest
+pytest-asyncio
+alembic
+sqlalchemy
+# 不声明 redis 客户端：全仓已无任何 `import redis`——Redis 功能自条目 3.0 起由
+# `app/db/redis.py` 的进程内垫片顶替。⚠️ 本文件只管**开发环境**：发布包以
+# `tools/packaging/requirements-lock.txt` + 构建专用 venv 为准，那两个环境里目前**仍有**
+# `redis`（lock 未重生），要摘掉它得先卸构建 venv 的包、重生 lock 并重跑 L0 + `--smoke`
+pymysql
+aiomysql
+# 桌面交付的 SQLite 异步驱动（阶段 3 · 条目 3.0：DB_BACKEND=sqlite 时启用；SQLite 为 Public Domain）
+aiosqlite
+qdrant-client==1.12.2
+cubeloop[mysql,mcp]==0.14.1
+pywebview
+# 离线管道（阶段 2 · 2.2）：文档解析依赖
+pypdf
+python-docx
+openpyxl
+python-pptx
+xlrd
+PyYAML

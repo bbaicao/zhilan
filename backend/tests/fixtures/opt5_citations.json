@@ -1,0 +1,18 @@
+{
+  "schema": "OPT5.citations.v1",
+  "scope": "编号解析与候选身份；合法编号不证明来源支持回答",
+  "cases": [
+    {"id":"ordinary","content":"答案[1]","refs":[{"title":"甲","ordinal":1},{"title":"乙","ordinal":2}],"mode":"cited","titles":["甲"]},
+    {"id":"leading-zero","content":"答案[01]","refs":[{"title":"旧甲"},{"title":"旧乙"}],"mode":"cited","titles":["旧甲"]},
+    {"id":"unicode-decimals","content":"[٠٢] [４] [𝟚] [२]","refs":[{"title":"第二","ordinal":2},{"title":"第四","ordinal":4}],"mode":"cited","titles":["第二","第四"]},
+    {"id":"fullwidth-brackets","content":"答案［2］","refs":[{"title":"第二","ordinal":2},{"title":"第四","ordinal":4}],"mode":"fallback","titles":["第二","第四"]},
+    {"id":"sparse","content":"答案[4]","refs":[{"title":"第二","ordinal":2},{"title":"第四","ordinal":4}],"mode":"cited","titles":["第四"]},
+    {"id":"sparse-unmatched","content":"答案[1]","refs":[{"title":"第二","ordinal":2},{"title":"第四","ordinal":4}],"mode":"fallback","titles":["第二","第四"]},
+    {"id":"duplicate-markers","content":"[4][2][4]","refs":[{"title":"第二","ordinal":2},{"title":"第四","ordinal":4}],"mode":"cited","titles":["第二","第四"]},
+    {"id":"duplicate-ordinals","content":"答案[2]","refs":[{"title":"显式第二","ordinal":2},{"title":"旧第二"},{"title":"另一第二","ordinal":2}],"mode":"cited","titles":["显式第二","旧第二","另一第二"]},
+    {"id":"invalid-ordinal","content":"[1][2][3][4][5]","refs":[{"title":"零","ordinal":0},{"title":"负数","ordinal":-1},{"title":"小数","ordinal":1.5},{"title":"字符串","ordinal":"2"},{"title":"布尔","ordinal":true}],"mode":"cited","titles":["零","负数","小数","字符串","布尔"]},
+    {"id":"invalid-markers","content":"[0] [-2] [ 2 ] [2.0] [99]","refs":[{"title":"第二","ordinal":2}],"mode":"fallback","titles":["第二"]},
+    {"id":"candidate","content":"未标来源的回答","refs":[{"title":"候选甲","ordinal":2},{"title":"候选乙","ordinal":4}],"mode":"fallback","titles":["候选甲","候选乙"]},
+    {"id":"empty","content":"[1]","refs":[],"mode":"none","titles":[]}
+  ]
+}

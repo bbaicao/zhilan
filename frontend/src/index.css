@@ -1,0 +1,303 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* ---- 条目 36：主题变量层 ----
+   颜色一律以 rgb 三元组存进 --zh-* 变量（配合 tailwind 的 rgb(var(--zh-x) / <alpha-value>)）。
+   :root 即深色（历史现值，逐像素不变）；浅色在 html[data-theme="light"] 整块覆盖。
+   主题的写入与持久化在 src/theme.ts，这里只定义两套值。 */
+:root {
+  --zh-canvas: 14 14 16;
+  --zh-sidebar: 22 22 23;
+  --zh-panel: 28 28 30;
+  --zh-composer: 35 35 38;
+  --zh-raise: 38 38 42;
+  --zh-ink: 243 243 244;
+  --zh-body: 214 214 217;
+  --zh-mute: 142 142 147;
+  --zh-faint: 92 92 96;
+  --zh-line: 44 44 48;
+  --zh-hairline: 35 35 38;
+  --zh-paper: 14 14 16;
+  --zh-mist: 35 35 38;
+  --zh-snow: 28 28 30;
+  --zh-brand: 232 160 84;
+  --zh-brand-soft: 42 33 22;
+  --zh-send: 237 237 237;
+  --zh-send-hover: 255 255 255;
+  --zh-rose: 248 113 113;
+  --zh-rose-soft: 58 29 28;
+  --zh-ok: 74 222 128;
+  --zh-warn: 251 191 36;
+  --zh-info: 108 182 255;
+  /* 雾层：深色 UI 上的白色透明层（悬停 / 次级填充） */
+  --zh-fog: 255 255 255;
+  /* 输入聚焦描边 / 滚动条 与 卡片悬停描边 */
+  --zh-edge: 74 74 79;
+  --zh-edge-soft: 58 58 62;
+  /* 辅助强调色 */
+  --zh-iris: 196 181 253;
+  --zh-azure: 91 155 213;
+  --zh-moss: 78 179 125;
+  --zh-olive: 143 174 107;
+  --zh-clay: 232 114 78;
+  --zh-apricot: 251 146 60;
+  /* 带固定透明度的整色：遮罩 / 画布悬浮条 / 凹陷底 */
+  --zh-veil: rgba(0, 0, 0, 0.55);
+  --zh-float: rgba(0, 0, 0, 0.4);
+  --zh-pit: rgba(0, 0, 0, 0.2);
+  /* 代码块底 / select option 兜底 / 键盘焦点描边 */
+  --zh-pre-bg: 20 20 22;
+  --zh-option-bg: 26 26 28;
+  --zh-focus-outline: 106 106 110;
+  /* 条目 49：文本选区底色（深色下 = 历史值 brand，逐像素不变） */
+  --zh-selection: 232 160 84;
+}
+
+html[data-theme="light"] {
+  --zh-canvas: 247 246 243;
+  --zh-sidebar: 239 237 233;
+  --zh-panel: 255 255 255;
+  --zh-composer: 243 242 238;
+  --zh-raise: 236 234 229;
+  --zh-ink: 38 38 43;
+  --zh-body: 63 62 68;
+  --zh-mute: 110 110 118;
+  --zh-faint: 154 154 162;
+  --zh-line: 227 225 220;
+  --zh-hairline: 236 234 229;
+  --zh-paper: 247 246 243;
+  --zh-mist: 243 242 238;
+  --zh-snow: 255 255 255;
+  --zh-brand: 168 107 37;
+  --zh-brand-soft: 247 234 214;
+  --zh-send: 38 38 42;
+  --zh-send-hover: 58 58 64;
+  --zh-rose: 214 69 69;
+  --zh-rose-soft: 250 231 228;
+  --zh-ok: 24 133 74;
+  --zh-warn: 180 83 9;
+  --zh-info: 29 111 197;
+  /* 浅色下雾层换成近黑透明层，悬停 / 填充才看得见 */
+  --zh-fog: 24 24 28;
+  --zh-edge: 169 168 176;
+  --zh-edge-soft: 220 218 212;
+  --zh-iris: 110 86 207;
+  --zh-azure: 47 111 181;
+  --zh-moss: 47 140 92;
+  --zh-olive: 100 130 58;
+  --zh-clay: 194 85 49;
+  --zh-apricot: 200 111 26;
+  --zh-veil: rgba(0, 0, 0, 0.4);
+  --zh-float: rgba(255, 255, 255, 0.78);
+  --zh-pit: rgba(0, 0, 0, 0.05);
+  --zh-pre-bg: 243 242 239;
+  --zh-option-bg: 255 255 255;
+  --zh-focus-outline: 138 138 146;
+  /* 条目 49：浅色下用加深的 brand 做选区底色，近黑正文压在上面仍然可辨 */
+  --zh-selection: 168 107 37;
+}
+
+/* 原生控件（select 下拉、input 的 datalist 建议）按 color-scheme 渲染，
+   配 option 兜底配色，避免下拉白字白底 / 黑字黑底。 */
+html {
+  color-scheme: dark;
+}
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+select option {
+  background-color: rgb(var(--zh-option-bg));
+  color: rgb(var(--zh-ink));
+}
+
+body {
+  margin: 0;
+  letter-spacing: 0;
+  background: rgb(var(--zh-canvas));
+  color: rgb(var(--zh-ink));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+textarea {
+  resize: none;
+}
+
+/* ---- 条目 49：文本可选中 ----
+   正文（用户消息气泡 / Markdown 回答 / 笔记与文档正文 / 输入框）可拖选、可 Ctrl+C；
+   界面里的装饰——按钮、标签、拖拽把手——不参与选中，免得拖过一片 UI 时满屏高亮。
+   `.md` 上显式写 user-select: text 是双保险：pywebview 默认会注入
+   `body{user-select:none}`，而显式的 text 能在任何祖先的 none 之下把正文重新放开
+   （客户端已同时改用 text_select=True，不再注入那条规则）。 */
+.md,
+input,
+textarea {
+  user-select: text;
+}
+
+button,
+label,
+[draggable="true"] {
+  user-select: none;
+}
+
+::selection {
+  background: rgb(var(--zh-selection) / 0.28);
+}
+
+:focus-visible {
+  outline: 1px solid rgb(var(--zh-focus-outline));
+  outline-offset: 2px;
+}
+
+textarea:focus-visible {
+  outline: none;
+}
+
+/* ---- 细滚动条 ---- */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--zh-edge-soft)) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgb(var(--zh-edge-soft));
+  border-radius: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--zh-edge));
+}
+
+/* ---- Markdown 排版（AI 消息） ---- */
+.md {
+  font-size: 15px;
+  line-height: 1.75;
+  color: rgb(var(--zh-body));
+  word-break: break-word;
+}
+.md > *:first-child {
+  margin-top: 0;
+}
+.md > *:last-child {
+  margin-bottom: 0;
+}
+.md p {
+  margin: 0.55em 0;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  color: rgb(var(--zh-ink));
+  font-weight: 600;
+  margin: 1em 0 0.45em;
+  line-height: 1.4;
+}
+.md h1 {
+  font-size: 1.3em;
+}
+.md h2 {
+  font-size: 1.18em;
+}
+.md h3 {
+  font-size: 1.08em;
+}
+.md h4 {
+  font-size: 1em;
+}
+.md ul,
+.md ol {
+  margin: 0.55em 0;
+  padding-left: 1.4em;
+}
+.md li {
+  margin: 0.28em 0;
+}
+.md li::marker {
+  color: rgb(var(--zh-mute));
+}
+.md a {
+  color: rgb(var(--zh-info));
+  text-decoration: none;
+  border-bottom: 1px solid rgb(var(--zh-info) / 0.35);
+}
+.md a:hover {
+  border-bottom-color: rgb(var(--zh-info));
+}
+.md strong {
+  color: rgb(var(--zh-ink));
+  font-weight: 600;
+}
+.md blockquote {
+  margin: 0.7em 0;
+  padding: 0.15em 0 0.15em 0.9em;
+  border-left: 2px solid rgb(var(--zh-edge-soft));
+  color: rgb(var(--zh-mute));
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid rgb(var(--zh-line));
+  margin: 1em 0;
+}
+.md code {
+  font-family: "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+  font-size: 0.86em;
+  background: rgb(var(--zh-fog) / 0.07);
+  border: 1px solid rgb(var(--zh-fog) / 0.06);
+  border-radius: 5px;
+  padding: 0.12em 0.38em;
+}
+.md pre {
+  margin: 0.7em 0;
+  background: rgb(var(--zh-pre-bg));
+  border: 1px solid rgb(var(--zh-hairline));
+  border-radius: 12px;
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+.md pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: rgb(var(--zh-body));
+}
+.md table {
+  border-collapse: collapse;
+  margin: 0.7em 0;
+  font-size: 0.92em;
+  width: 100%;
+}
+.md th,
+.md td {
+  border: 1px solid rgb(var(--zh-line));
+  padding: 6px 12px;
+  text-align: left;
+}
+.md th {
+  background: rgb(var(--zh-fog) / 0.04);
+  color: rgb(var(--zh-ink));
+  font-weight: 600;
+}

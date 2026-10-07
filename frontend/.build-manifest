@@ -1,0 +1,8 @@
+{
+  "src_tree_hash": "78c470134fdf7187cc3e61938c5ba0e479dc044726bbc73e6fa9f0eebe347b68",
+  "src_file_count": 43,
+  "dist_tree_hash": "ddb62648ae91e6e5d4abc13dace3a2d8850b08cfda2436a7825bb74727af4c78",
+  "dist_file_count": 7,
+  "built_at": "2026-10-07T18:54:42",
+  "note": "由 backend/scripts/check_frontend_dist_freshness.py --write 生成；改 frontend/src 后须重跑 npm run build 并重生成（src/dist 两哈希都记）"
+}

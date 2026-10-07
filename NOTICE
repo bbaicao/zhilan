@@ -1,0 +1,52 @@
+Zhilan (知澜)
+Copyright 2026 bbaicao
+
+The original source code in this repository is licensed under Apache-2.0.
+See LICENSE for the full text. Third-party packages, assets and model weights
+retain their own licenses; the project license does not replace those terms.
+
+Dependencies
+------------
+The source dependency declarations are in backend/requirements.txt and
+frontend/package.json. frontend/package-lock.json records the frontend
+dependency versions. tools/packaging/requirements-lock.txt records the
+separate Windows build environment.
+
+MinerU is an optional document-parsing dependency. Its installed license
+includes additional terms beyond the standard Apache-2.0 text. Refer to
+the exact distribution's LICENSE.md before redistributing that component.
+The Windows license collector checks that text against a pinned hash.
+
+The Windows packaging specification excludes mineru_llama_cpp, GGUF
+runtime support, Gradio and the other packages listed in its excludes
+setting. They must not be inferred to be bundled merely because they
+appear in the build environment's dependency lock.
+
+Distribution notices
+--------------------
+tools/packaging/collect_licenses.py collects the license texts for the
+Windows distribution from the build environment, the packaging
+specification and the vendored license texts under
+tools/packaging/licenses-vendor/. Its generated inventory records the
+component names, license sources and hashes. It is derived from the build
+environment, dependency lock and packaging exclusions, rather than the
+actual frozen module inventory; build-only components may appear.
+
+Windows installers include LICENSE, NOTICE and a licenses directory.
+Consult that generated directory for the collected license materials and
+verify them against the actual distribution. The collector's PASS covers
+its explicit file and hash assertions, not complete license compliance.
+
+The vendored texts retain their provenance notes. The cobble text is a
+BSD template prepared from upstream declarations, not a retrieved
+upstream license file. Other notes referring to master/main are not yet
+bound to immutable source revisions for each listed package version.
+The proxy_tools upstream text and wheel declaration differ; the retained
+text also contains an unusual concatenation. These require further
+version-specific source verification before claiming complete coverage.
+
+Model weights are distributed separately from this source repository.
+tools/packaging/models-manifest.txt records the expected ONNX files,
+sizes and hashes. A file hash is an integrity check, not a license grant;
+redistribution also requires the terms and provenance of the exact model
+files. Model terms are not covered by this project's Apache-2.0 license.

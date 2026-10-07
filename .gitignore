@@ -1,0 +1,36 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Local data, models, build outputs and release attachments
+/data/
+/models/
+/dist/
+/build/
+/release-assets/
+frontend/dist/
+
+# Dependency and interpreter caches
+.venv/
+node_modules/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.tsbuildinfo
+
+# Logs and local tools
+*.log
+*.exit
+*.out
+*.err
+.workbuddy/
+.uvicorn_*
+
+# Private development material
+/AGENTS.md
+/Atlas.md
+任务树/
+任务树-文档解析升级/
+重构方案/
+docs/
