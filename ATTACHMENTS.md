@@ -1,6 +1,6 @@
 # v0.1.0-public.1 发布附件说明
 
-日期：2026-10-08。应用版本为 v0.1.0。本次源码、Windows 安装包、离线文档解析模型包均已在本地准备并核对，尚未上传 GitHub。本地附件位于 release-assets 下的 public-20261008 子目录，源码标签为 `v0.1.0-public.1`；旧标签和旧附件保留，不能用于本次发布。
+日期：2026-10-08。应用版本为 v0.1.0。本次源码、Windows 安装包、离线文档解析模型包已在 [GitHub 预发布下载页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.0-public.1)公开，18 件附件均已核对服务器 SHA256、大小与上传状态。原始本地附件位于 release-assets 下的 public-20261008 子目录，线上校验清单与发布记录位于 github-20261008 子目录，源码标签为 `v0.1.0-public.1`；旧标签和旧附件保留，不能用于本次发布。
 
 ## 附件清单
 
@@ -10,10 +10,12 @@
 | `zhilan-setup-0.1.0-public-ready-20261008.exe` | Windows x64 安装器，含程序、离线运行时及许可证目录 |
 | `zhilan-models-offline-0.1.0-public-ready-20261008.zip` | 文档解析模型包，655762975 字节 |
 | `INSTALLATION-TERMS.txt` | 与安装器许可页输入逐字一致的第三方条款 |
-| `附件说明.md` | 本说明的配套副本 |
-| `RELEASE-NOTES.md` | 可直接用于预发布说明的正文 |
+| `ATTACHMENTS-zh-CN.md` | 中文附件说明；原本地文件名为“附件说明.md”，上传后使用 GitHub 兼容名称 |
+| `RELEASE-NOTES.md` | 标签时的发布准备正文，实际发布状态见线上发布页 |
 | `SOURCE-INVENTORY.json` | 源码提交、标签、树及逐件文件长度和 SHA256 |
-| `SHA256SUMS.txt` | 上述附件的最终 SHA256 清单 |
+| `SHA256SUMS.txt` | 按线上实际附件名生成的最终 SHA256 清单，下载后使用此清单核验 |
+| `SHA256SUMS-local-preparation.txt` | 保留的原始本地准备清单，其中中文附件名属于上传前名称 |
+| `README.md`、`USAGE.md`、`CONFIGURATION.md`、`ARCHITECTURE.md`、`RELEASE.md`、`CHANGELOG.md`、`LICENSE`、`NOTICE`、`ATTACHMENTS.md` | 发布标签时的使用、配置、架构和许可文档快照 |
 
 安装器 SHA256：`5eae7feb0aa7df785b77558a47d4d00137e4c9d045ef40010144187a5d1182f3`。
 
@@ -58,4 +60,4 @@ MinerU 4.0.0 的实际全文包含标准 Apache-2.0 之外的附加条件；WebV
 
 模型 ZIP 保留固定来源、六份模型卡、Apache 全文和转换/配置修改说明。五个直接来源的固定版本声明 Apache-2.0，集合内 Formula 配置另有第三方来源。Layout 与 Formula 原配置的独立下载本轮再次超时，身份由固定官方清单和实算哈希绑定，不能声称独立原文逐字核对完成。
 
-更多使用、配置和发布范围见 [README](README.md)、[USAGE](USAGE.md)、[RELEASE](RELEASE.md) 和 [NOTICE](NOTICE)。本地准备与实测完成不表示已取得无保留的法律结论，也不表示 GitHub 已发布。
+更多使用、配置和发布范围见 [README](README.md)、[USAGE](USAGE.md)、[RELEASE](RELEASE.md) 和 [NOTICE](NOTICE)。GitHub 公开预发布已完成；这不表示已取得无保留的法律结论，也不扩大本版实测范围。源码 ZIP 与独立文档附件保留标签时的准备快照，实际线上状态以发布页面及仓库 `main` 文档为准。
