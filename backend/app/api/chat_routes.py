@@ -849,6 +849,9 @@ async def _generate(plan: TurnPlan, model) -> str:
     if plan.cached:
         plan.generation_status = answer_mod.generation_status(plan.cached_answer)
         return plan.cached_answer
+    web_error = await _prepare_direct_web(plan)
+    if web_error:
+        return web_error
     # 回归修复：``getattr`` 兼容替身（既有用例用 SimpleNamespace 当 TurnPlan，
     # 没有 ``images`` 字段时按无图处理——照 ``plan_attempt_id`` 的同款口径，
     # 新字段不得把替身驱动的老用例打红）。
@@ -872,6 +875,29 @@ async def _generate(plan: TurnPlan, model) -> str:
     plan.finish_reason = result.finish_reason
     plan.error_hint = result.error_hint
     return result.answer
+
+
+async def _prepare_direct_web(plan: TurnPlan) -> str | None:
+    """普通对话复用联网工具；搜索失败不继续生成无来源的时效回答。"""
+    if (
+        not plan.needs_model or plan.cached
+        or getattr(plan, "agent_mode", "off") in AGENT_MODES
+        or not wants_web(plan)
+        or any((plan.filters or {}).values())
+    ):
+        return None
+    from app.agent.tools.web_search import WebSearchArgs, build_spec
+
+    observation = await build_spec().handler(WebSearchArgs(query=plan.retrieval_query))
+    if not observation.ok or not observation.materials:
+        hint = observation.text if not observation.ok else "联网搜索没有找到可引用的资料，请换个关键词重试。"
+        plan.generation_status = "failed"
+        plan.error_hint = hint
+        return hint
+    _install_agent_materials(
+        plan, _merge_material_snapshots(observation.materials, plan.materials)
+    )
+    return None
 
 
 def _install_agent_materials(plan: TurnPlan, materials: list) -> None:
@@ -1171,6 +1197,11 @@ async def stream_tokens(
 
     from cubeloop.providers.base import TextContent, UserMessage
 
+    web_error = await _prepare_direct_web(plan)
+    if web_error:
+        yield "error", web_error
+        return
+
     # ⚠️ **Agent 分支跑完之后才取**（上面那段 ``run_agent_turn`` 会写回 ``plan.tool_context``）
     # ——本批的第一性质（D8）就落在这里：``tool_context`` 为空时下面两次调用与改前逐字相同。
     ctx = answer_context(plan)
@@ -1185,6 +1216,7 @@ async def stream_tokens(
         plan.error_hint = answer_mod.CONTEXT_BUDGET_HINT
         yield "error", plan.error_hint
         return
+
     typed = answer_mod._to_typed_messages(
         built, TextContent, UserMessage, images=plan_images
     )

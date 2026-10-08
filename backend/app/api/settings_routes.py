@@ -554,9 +554,8 @@ async def put_settings(payload: SettingsIn) -> dict:
         updates["WORKSPACE_ROOT"] = payload.workspace_root.strip()
     if payload.reasoning is not None:
         updates.update(_resolve_reasoning(payload.reasoning))
-    # 五段里真正没实装的两段：**明确中文 400**（不是「接受后丢弃」）
     if payload.web is not None:
-        raise HTTPException(status_code=400, detail=WEB_PUT_REJECTED)
+        updates.update(_resolve_web(payload.web))
     if payload.data is not None:
         raise HTTPException(status_code=400, detail=DATA_PUT_REJECTED)
 
@@ -579,6 +578,47 @@ async def put_settings(payload: SettingsIn) -> dict:
         setattr(settings, key, _stored_value(key, value))
 
     return current_payload(notice)
+
+
+def _resolve_web(item) -> dict[str, str]:
+    from app.agent.web.spec import provider_spec, normalize_provider
+
+    if "ssrf_allow_any_host" in item.model_fields_set:
+        raise HTTPException(status_code=400, detail=WEB_PUT_REJECTED)
+    updates = {}
+    updates.update({
+        "WEB_ENABLE": item.enabled,
+        "WEB_CHANNEL": item.channel,
+        "WEB_SEARCH_PROVIDER": normalize_provider(item.provider) if item.provider is not None else None,
+        "WEB_SEARCH_API_KEY": (item.api_key or "").strip() or None,
+        "WEB_MAX_RESULTS": item.max_results,
+        "WEB_FETCH_TIMEOUT": item.timeout,
+        "WEB_LLM_PROVIDER": item.llm_provider,
+        "WEB_LLM_MODEL": item.llm_model,
+        "WEB_LLM_BASE_URL": item.llm_base_url,
+        "WEB_LLM_API_KEY": (item.llm_api_key or "").strip() or None,
+        "WEB_LLM_MAX_SEARCHES": item.llm_max_searches,
+        "WEB_LLM_SEARCH_TOOL": item.llm_search_tool,
+    })
+    if item.channel is not None and item.channel not in {"api", "llm"}:
+        raise HTTPException(status_code=400, detail="联网渠道必须是 api 或 llm")
+    if item.provider is not None and provider_spec(normalize_provider(item.provider)) is None:
+        raise HTTPException(status_code=400, detail="未登记的搜索服务商")
+    if item.llm_provider is not None and item.llm_provider not in {"mimo", settings.WEB_LLM_PROVIDER}:
+        raise HTTPException(status_code=400, detail="大模型搜索目前支持 MiMo")
+    for value, low, high, label in (
+        (item.max_results, 1, 10, "搜索结果数"),
+        (item.timeout, 3, 60, "搜索超时"),
+        (item.llm_max_searches, 1, 6, "搜索关键词数"),
+    ):
+        if value is not None and not low <= value <= high:
+            raise HTTPException(status_code=400, detail=f"{label}必须在 {low} 到 {high} 之间")
+    if item.llm_search_tool is not None and item.llm_search_tool not in {"", "web_search"}:
+        raise HTTPException(status_code=400, detail="不支持的联网插件")
+    return {
+        key: str(value).lower() if isinstance(value, bool) else str(value).strip()
+        for key, value in updates.items() if value is not None
+    }
 
 
 def _resolve_agent(item) -> dict[str, str]:
@@ -790,8 +830,16 @@ async def fetch_web_llm_models(payload: WebModelsIn) -> dict:
     `base_url_hint` 与 `key_hint`；v2 **没有联网服务商登记表**（`web` 段的设置页写入通道未实装），
     故只在「地址 / Key 都没有」时给通用中文提示。
     """
-    base_url = ((payload.base_url or "").strip() or (settings.WEB_LLM_BASE_URL or "").strip()).rstrip("/")
-    api_key = (payload.api_key or "").strip() or (settings.WEB_LLM_API_KEY or "").strip()
+    from app.agent.web.llm import resolved_config
+
+    _provider, effective_base, effective_key, _model = resolved_config()
+    saved_base = (settings.WEB_LLM_BASE_URL or "").strip().rstrip("/")
+    # The implicit official endpoint is usable only with a configured credential.
+    base_url = ((payload.base_url or "").strip() or saved_base or
+                (effective_base if effective_key else "")).rstrip("/")
+    api_key = (payload.api_key or "").strip()
+    if not api_key and base_url == effective_base:
+        api_key = effective_key
     if not base_url:
         raise HTTPException(status_code=400, detail="请先填写接口地址")
     if not api_key:

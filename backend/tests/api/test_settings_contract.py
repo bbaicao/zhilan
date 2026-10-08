@@ -484,7 +484,7 @@ def test_a13_env_mode_and_rerank_without_services_is_400(client, monkeypatch, fa
 @pytest.mark.parametrize(
     "segment,payload,needle",
     [
-        ("web", {"enabled": True, "provider": "tavily"}, "联网检索"),
+        ("web", {"ssrf_allow_any_host": True}, "联网检索"),
         ("data", {"chroma_dir": "D:/x", "migrate": True}, "向量库位置"),
     ],
 )

@@ -5,9 +5,8 @@
 鉴权口径与端点提示。四处硬编码服务商文案，迟早出现「界面说要填 A，工具却说 B」。
 
 **本表只登记 ``api`` 渠道**（传统搜索 API）的六家：``duckduckgo``（免 Key）/ ``serper`` /
-``tavily`` / ``bocha`` / ``baidu`` / ``bing``。``llm`` 渠道（大模型搜索）在条目 4.1
-**有意不实装**（见 `接口冻结 §十一` 的偏差登记 2），故这里只留渠道描述 :data:`CHANNELS`
-给设置页显示、**不登记大模型服务商**——登记了就会有人以为能选。
+``tavily`` / ``bocha`` / ``baidu`` / ``bing``。``llm`` 渠道通过
+``app.agent.web.llm`` 调用 MiMo 原生联网插件，来源使用服务商的引用元数据。
 
 字段刻意只有八项（老基线里的 ``cost`` / ``note`` / ``source`` 未搬）：本条目的读者只有
 工具层（要 ``label`` / ``needs_key`` / ``key_hint`` / ``request_timeout``）与后续的设置页；
@@ -147,7 +146,7 @@ CHANNELS: tuple[dict[str, str], ...] = (
         "label": "大模型搜索",
         "summary": (
             "走大模型对话接口做联网检索，由模型整理出若干条带链接的摘要"
-            "（如 DeepSeek 网页搜索）。本版本尚未实装。"
+            "（MiMo 原生 web_search 插件），返回可引用的网页来源。"
         ),
     },
 )

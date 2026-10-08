@@ -712,10 +712,14 @@ async def search_web(
     if not query:
         return []
 
-    # 大模型搜索渠道：条目 4.1 不实装（接口冻结 §十一 偏差 2），显式报错、**不静默降级**
     channel = str(settings.WEB_CHANNEL or CHANNEL_API).strip().lower()
     if channel == CHANNEL_LLM:
-        raise WebToolError("大模型搜索渠道尚未实装，请到设置里改用「传统搜索 API」渠道。")
+        from app.agent.web.llm import search
+        return await search(
+            query,
+            max_results=max(1, int(max_results if max_results is not None else settings.WEB_MAX_RESULTS)),
+            timeout=float(timeout if timeout is not None else settings.WEB_FETCH_TIMEOUT),
+        )
 
     wanted = provider if provider is not None else settings.WEB_SEARCH_PROVIDER
     provider_id = normalize_provider(wanted)

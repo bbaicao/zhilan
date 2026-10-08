@@ -88,6 +88,18 @@ SETTINGS_PUT_KEYS: tuple[str, ...] = (
     # settings_routes.py · translate / reasoning（dict 字面 :614/:643/:674）
     "DEEPL_API_KEY",
     "CHAT_REASONING",
+    "WEB_ENABLE",
+    "WEB_CHANNEL",
+    "WEB_SEARCH_PROVIDER",
+    "WEB_SEARCH_API_KEY",
+    "WEB_MAX_RESULTS",
+    "WEB_FETCH_TIMEOUT",
+    "WEB_LLM_PROVIDER",
+    "WEB_LLM_MODEL",
+    "WEB_LLM_BASE_URL",
+    "WEB_LLM_API_KEY",
+    "WEB_LLM_MAX_SEARCHES",
+    "WEB_LLM_SEARCH_TOOL",
     # skill_routes.py · PUT /api/skills（:144/:190/:198-199）
     "SKILL_DIR",
     "MCP_SERVERS",

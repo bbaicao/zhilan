@@ -13,11 +13,12 @@
 1. **真实现（读到就真用）**：`reasoning`（厂商思考参数登记表 + `CHAT_REASONING` 读写通道，
    见 `app/core/reasoning/`）、`rerank`（口径 A 落 `MODEL_ROLES.rerank`）、
    `agent`（`AGENT_*` 三条键的消费方已在 4.1/4.2/4.3 落地）；
-2. **诚实空态 + 明确 400**：`web` 没有设置页写入通道、`data` 没有目录搬迁能力
+2. **联网设置**：`web` 支持持久化配置、传统搜索及 MiMo 原生联网；SSRF 放行字段只读。
+3. **诚实空态 + 明确 400**：`data` 没有目录搬迁能力
    ——`GET` 侧键**必须齐**（冻结前端逐字读，缺键 = 弹窗崩），值必须**诚实**；
    `PUT` 侧给**明确中文 400**，绝不「接受后丢弃」（那正是 `022`/`016` 这一族
    静默缺陷的根因）；
-3. **旧扁平段**：`chat` / `embed` / `vision`（env 模式下冻结前端真的会发）。
+4. **旧扁平段**：`chat` / `embed` / `vision`（env 模式下冻结前端真的会发）。
 """
 
 from __future__ import annotations
@@ -102,7 +103,7 @@ class RerankIn(BaseModel):
 
 
 class WebIn(BaseModel):
-    """联网检索（条目 26）。**v2 只收不改**（设置页写入通道未实装）。字段照 `api.ts:1181-1195`。"""
+    """联网检索设置；密钥留空保留，SSRF 逃生门只读。"""
 
     enabled: bool | None = None
     channel: str | None = None
@@ -116,6 +117,7 @@ class WebIn(BaseModel):
     llm_api_key: str | None = None
     llm_max_searches: int | None = None
     llm_search_tool: str | None = None
+    ssrf_allow_any_host: bool | None = None
 
 
 class AgentIn(BaseModel):
@@ -319,14 +321,14 @@ def web_payload() -> dict:
     有意只留八项（`spec.py` 的模块注释写明「没有读者的字段搬过来只会腐烂」）。
     前端 `CostNote` 在 `cost/note/source` 全空时返回 `null`（`WebDialog.tsx:78`），不会渲染空块。
 
-    `llm`（可选）如实回读 `WEB_LLM_*` 的**配置位**，并在 `search_tool_note` 里写明
-    「本版本尚未实装大模型搜索渠道」——登记的键是真的、渠道是假的，两件事分开说清楚。
+    `llm`（可选）回读 MiMo 搜索配置；缺省地址使用官方接口，同厂商官方对话绑定
+    可提供缺省型号与密钥。有效配置只表示可以发起请求，不保证远端权限和额度。
 
     **回归修复（2026-09-27 拍板②）**：`ssrf_allow_any_host`（可选布尔键）= SSRF 逃生门
     `WEB_SSRF_ALLOW_ANY_HOST`（`config.py`，默认 False）的**只读暴露**——机器可读，
     前端**零消费**（「零前端改动」是有意拍板口径，本键只服务机器 / 排障读数）。
-    **只进 GET、不进 PUT**：`PUT.web` 仍整段 400（`WEB_PUT_REJECTED` 文案不动），
-    改 `.env` + 重启仍是这条开关的唯一通道。值**现读**（`getattr` 兜底 False），
+    **只进 GET、不进 PUT**：写 `ssrf_allow_any_host` 仍返回 400；
+    其余联网配置支持保存。改 `.env` + 重启仍是这条逃生开关的唯一通道。值**现读**（`getattr` 兜底 False），
     与守卫**同源**（`net_guard.allow_any_host()` 与 `agent/web/client.py` 的 `_guard_hook`
     看到的是同一个单例上的同一个值）。
     """
@@ -342,16 +344,17 @@ def web_payload() -> dict:
 
     blocked_by = ""
     if enabled:
-        if spec is None:
+        if channel == web_spec.CHANNEL_LLM:
+            from app.agent.web.llm import configuration_error
+            blocked_by = configuration_error()
+        elif spec is None:
             allowed = "、".join(row.id for row in web_spec.WEB_PROVIDERS)
             blocked_by = f"未登记的搜索服务商：{provider}。可选：{allowed}"
-        elif channel == web_spec.CHANNEL_LLM:
-            # 本版本**没有**大模型搜索渠道的实现 ⇒ 这是一个**真的**跑不起来的原因
-            blocked_by = "本版本尚未实装「大模型搜索」渠道，请把渠道改回「传统搜索 API」。"
         elif spec.needs_key and not has_key:
             blocked_by = f"{spec.label} 需要 API Key：{spec.key_hint or '请到设置页填写'}"
 
-    llm_provider = (settings.WEB_LLM_PROVIDER or "").strip().lower()
+    from app.agent.web.llm import resolved_config
+    llm_provider, llm_base, llm_key, llm_model = resolved_config()
     return {
         "enabled": enabled,
         "channel": channel,
@@ -375,18 +378,17 @@ def web_payload() -> dict:
         ],
         "llm": {
             "provider": llm_provider,
-            "provider_label": llm_provider,
-            "model": (settings.WEB_LLM_MODEL or "").strip(),
+            "provider_label": "MiMo" if llm_provider == "mimo" else llm_provider,
+            "model": llm_model,
             "models": [],
-            "base_url": (settings.WEB_LLM_BASE_URL or "").strip(),
-            "has_key": bool((settings.WEB_LLM_API_KEY or "").strip()),
+            "base_url": llm_base,
+            "has_key": bool(llm_key),
             "max_searches": int(settings.WEB_LLM_MAX_SEARCHES),
             "search_tool": (settings.WEB_LLM_SEARCH_TOOL or "").strip(),
             "search_tool_note": (
-                "本版本只登记了大模型搜索的配置位，**渠道本身尚未实装**"
-                "（设置页也暂不支持保存本段），请改用「传统搜索 API」。"
+                "MiMo 通过服务商联网插件搜索并返回来源；需使用支持 web_search 的型号。"
             ),
-            "providers": [],
+            "providers": [{"id": "mimo", "label": "MiMo"}],
         },
         "max_results": int(settings.WEB_MAX_RESULTS),
         "timeout": float(settings.WEB_FETCH_TIMEOUT),

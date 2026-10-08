@@ -400,12 +400,12 @@ class Settings(BaseSettings):
     WEB_CHANNEL: str = "api"
     WEB_SEARCH_PROVIDER: str = "duckduckgo"  # duckduckgo（免 Key）/ serper / tavily / bocha / baidu / bing
     WEB_SEARCH_API_KEY: str = ""
-    WEB_LLM_PROVIDER: str = "deepseek"
+    WEB_LLM_PROVIDER: str = "mimo"
     WEB_LLM_MODEL: str = ""
     WEB_LLM_BASE_URL: str = ""
     WEB_LLM_API_KEY: str = ""
     WEB_LLM_MAX_SEARCHES: int = 5  # 引擎内夹 1..10
-    WEB_LLM_SEARCH_TOOL: str = ""  # 空 = 不带 tools
+    WEB_LLM_SEARCH_TOOL: str = "web_search"
     WEB_FETCH_TIMEOUT: float = 12.0  # 搜索与抓取共用的超时（秒）
     WEB_MAX_RESULTS: int = 4  # 单次搜索最多取几条
     WEB_MAX_CONTENT: int = 4000  # 单页正文并入上下文的上限（字符）

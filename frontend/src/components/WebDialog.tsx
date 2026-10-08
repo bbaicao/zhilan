@@ -119,8 +119,9 @@ export default function WebDialog({
   const [maxResults, setMaxResults] = useState(String(web.max_results));
   const [timeout, setTimeoutSec] = useState(String(web.timeout));
 
-  // 大模型搜索：Key / 地址 / 型号 / 搜索次数；服务商沿用后端默认，不在 UI 里选
+    // 大模型搜索的独立配置；官方 MiMo 可复用已绑定的对话凭据。
   const llmState = web.llm;
+  const [llmProvider, setLlmProvider] = useState(llmState?.provider ?? "mimo");
   const [llmBaseUrl, setLlmBaseUrl] = useState(llmState?.base_url ?? "");
   const [llmApiKey, setLlmApiKey] = useState("");
   const [llmModel, setLlmModel] = useState(llmState?.model ?? "");
@@ -137,7 +138,7 @@ export default function WebDialog({
 
   const nextMax = clampInt(maxResults, 1, 10, web.max_results);
   const nextTimeout = clampInt(timeout, 3, 60, web.timeout);
-  const nextLlmMax = clampInt(llmMaxSearches, 1, 10, llmState?.max_searches ?? 5);
+  const nextLlmMax = clampInt(llmMaxSearches, 1, 6, llmState?.max_searches ?? 5);
 
   const changed =
     enabled !== web.enabled ||
@@ -148,6 +149,7 @@ export default function WebDialog({
     nextTimeout !== web.timeout ||
     llmBaseUrl.trim().replace(/\/+$/, "") !== (llmState?.base_url ?? "") ||
     llmApiKey.trim() !== "" ||
+    llmProvider !== (llmState?.provider ?? "mimo") ||
     llmModel.trim() !== (llmState?.model ?? "") ||
     nextLlmMax !== (llmState?.max_searches ?? 5) ||
     llmSearchTool !== (llmState?.search_tool ?? "");
@@ -183,8 +185,9 @@ export default function WebDialog({
         api_key: apiKey.trim(),
         max_results: nextMax,
         timeout: nextTimeout,
-        // 大模型搜索：提交用户在界面上真正改的几项；服务商沿用后端默认
+          // 保存完整配置，留空的 Key 由服务端保留。
         llm_base_url: llmBaseUrl.trim(),
+        llm_provider: llmProvider,
         llm_api_key: llmApiKey.trim(),
         llm_model: llmModel.trim(),
         llm_max_searches: nextLlmMax,
@@ -257,6 +260,13 @@ export default function WebDialog({
                       type="button"
                       onClick={() => {
                         setChannel(row.id);
+                        if (row.id === "llm" && llmProvider !== "mimo") {
+                          setLlmProvider("mimo");
+                          setLlmSearchTool("web_search");
+                          setLlmBaseUrl("");
+                          setLlmModel("");
+                          setLlmMaxSearches(String(Math.max(1, Math.min(6, nextLlmMax))));
+                        }
                         setPane(row.id === "llm" ? "llm" : "api");
                         setError("");
                       }}
@@ -443,16 +453,21 @@ export default function WebDialog({
                         onChange={(event) => setLlmApiKey(event.target.value)}
                         spellCheck={false}
                         autoComplete="off"
-                        placeholder={llmState.has_key ? "DeepSeek 开放平台 API Key" : "填写 API Key"}
+                        placeholder={llmState.has_key ? "留空保持当前 API Key" : "填写 MiMo API Key"}
                         className={cx(inputCls, "font-mono text-[12.5px]")}
                       />
                       <p className="mt-1.5 px-0.5 text-[11px] leading-4 text-faint">
-                        不写入设置文件。留空表示保持当前密钥。
+                        密钥保存在本机。留空表示保持当前密钥。
                       </p>
                     </div>
 
                     <div>
-                      <div className="mb-1.5 px-0.5 text-[12.5px] text-body">接口地址</div>
+                      <div className="mb-1.5 px-0.5 text-[12.5px] text-body">大模型搜索服务商</div>
+                      <select value={llmProvider} onChange={(event) => setLlmProvider(event.target.value)} className={inputCls}>
+                        {llmProvider !== "mimo" ? <option value={llmProvider}>{llmProvider}（暂不支持）</option> : null}
+                        <option value="mimo">MiMo</option>
+                      </select>
+                      <div className="mb-1.5 mt-3 px-0.5 text-[12.5px] text-body">接口地址</div>
                       <input
                         value={llmBaseUrl}
                         onChange={(event) => setLlmBaseUrl(event.target.value)}
@@ -534,7 +549,7 @@ export default function WebDialog({
                           <div className="mt-0.5 text-[11px] leading-4 text-faint">
                             {llmSearchTool
                               ? "搜索请求会带上联网搜索工具，由服务商侧真检索并返回引用。"
-                              : "不带联网工具；自带联网的模型（如 DeepSeek）保持关闭。"}
+                              : "请开启联网插件，普通对话接口不会自动搜索。"}
                           </div>
                         </div>
                         <Toggle
@@ -549,17 +564,17 @@ export default function WebDialog({
                     </div>
 
                     <div>
-                      <div className="mb-1.5 px-0.5 text-[12.5px] text-body">单次请求最多搜索次数</div>
+                      <div className="mb-1.5 px-0.5 text-[12.5px] text-body">单次请求最多搜索关键词数</div>
                       <input
                         type="number"
                         min={1}
-                        max={10}
+                        max={6}
                         value={llmMaxSearches}
                         onChange={(event) => setLlmMaxSearches(event.target.value)}
                         className={inputCls}
                       />
                       <p className="mt-1.5 px-0.5 text-[11px] leading-4 text-faint">
-                        一次请求在必须作答前最多可以搜索多少次。
+                        MiMo 每次请求支持 1 到 6 个搜索关键词。
                       </p>
                     </div>
                   </div>

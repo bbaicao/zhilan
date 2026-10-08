@@ -444,13 +444,13 @@ async def test_search_web_empty_query_returns_empty_without_request(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_search_web_llm_channel_is_explicitly_not_implemented(monkeypatch):
-    """条目 4.1 有意不实装大模型搜索渠道：**显式报错**，不静默退回 api 渠道。"""
+async def test_search_web_llm_channel_rejects_unsupported_provider(monkeypatch):
     monkeypatch.setattr(settings, "WEB_CHANNEL", CHANNEL_LLM)
+    monkeypatch.setattr(settings, "WEB_LLM_PROVIDER", "deepseek")
     log = _install_httpx(monkeypatch)
     with pytest.raises(WebToolError) as excinfo:
         await search_web("q", provider="duckduckgo")
-    assert str(excinfo.value) == "大模型搜索渠道尚未实装，请到设置里改用「传统搜索 API」渠道。"
+    assert "目前支持 MiMo" in str(excinfo.value)
     assert log == []
 
 

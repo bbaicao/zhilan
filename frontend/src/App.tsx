@@ -547,6 +547,7 @@ export default function App() {
     try {
       const next = await updateSettings(payload);
       setSettingsData(next);
+      if (payload.web?.enabled !== undefined) setChatWebEnabled(next.web.enabled);
       await refreshHealth();
       // 厂商或接口地址可能变了，模型列表作废，下次打开重新拉取
       setModels(null);

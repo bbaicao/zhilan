@@ -68,18 +68,26 @@ MCP 配置使用以下键：
 
 许可默认关闭，名单不接受通配符。`stdio` 服务需要可执行命令及依赖，HTTP 服务需要可用地址和外发许可。MCP 发现失败目前主要从 `logs/zhilan.log` 排查，见 [README](README.md#mcp-与联网功能排障)。
 
-联网相关键如下，修改 `.env` 后需重启，当前设置页不能写入联网配置段：
+在“设置 → 联网搜索”选择渠道并保存即可生效；直接修改 `.env` 后需重启。对话页的联网开关控制本轮是否搜索。限定知识库、文档等范围的提问仍遵守该范围。
 
 | 配置键 | 默认或示例 | 含义 |
 |---|---|---|
 | `WEB_ENABLE` | `false` | 是否装配联网搜索与页面抓取工具 |
-| `WEB_CHANNEL` | `api` | 当前实现 API 搜索渠道，`llm` 渠道尚未实现 |
+| `WEB_CHANNEL` | `api` | `api` 为传统搜索，`llm` 为 MiMo 原生搜索 |
 | `WEB_SEARCH_PROVIDER` | `duckduckgo` | 搜索提供方，其他提供方需要相应服务及凭据 |
 | `WEB_SEARCH_API_KEY` | 空 | 需要 Key 的搜索服务凭据 |
+| `WEB_LLM_PROVIDER` | `mimo` | 大模型搜索目前支持 MiMo |
+| `WEB_LLM_MODEL` | 空 | 搜索型号；为空时可复用官方 MiMo 对话绑定 |
+| `WEB_LLM_BASE_URL` | 空 | 默认 `https://api.xiaomimimo.com/v1` |
+| `WEB_LLM_API_KEY` | 空 | 独立搜索凭据；官方地址可复用官方 MiMo 对话凭据 |
+| `WEB_LLM_SEARCH_TOOL` | `web_search` | MiMo 原生联网插件，必须开启 |
+| `WEB_LLM_MAX_SEARCHES` | `5` | 每次最多 1 到 6 个搜索关键词 |
 | `WEB_SSRF_ALLOW_ANY_HOST` | `false` | 允许私网或本机地址的开关；一般保持关闭 |
 | `WEB_SEARCH_BUDGET_SECONDS` | `20` | 一次搜索的抓取预算，单位秒，`0` 表示不限制 |
 
 `WEB_SSRF_ALLOW_ANY_HOST` 的启用状态可从只读设置 API 获取，但前端界面不显示；允许相应地址时只有 WARNING 日志。不要把一般搜索超时当作需要开启此开关的理由。
+
+搜索结果使用服务商返回的来源注释，并在普通回答和流式回答中参与资料引用；无来源或搜索失败会显示原因。使用远程搜索会发送提问，并可能产生厂商费用；设置显示有效不代表远端额度、权限或连通性已验证。配置密钥保存在本机 `.env`，界面留空保留已有密钥。复用的 MiMo 凭据不会发送到其他主机、明文 HTTP 或非标准端口。
 
 ## 配置与数据外发
 

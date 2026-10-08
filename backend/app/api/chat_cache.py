@@ -77,6 +77,8 @@ def build_cache_key(
         return None
     if images:
         return None
+    if "builtin:web" in (skill_ids or []):
+        return None
     try:
         # 延迟 import（回归修复 S2）：attempt_provider_model 被 tests 按 chat_routes 属性 monkeypatch（backend/tests/api/test_cache_note_liveness_5_6.py:74），
         # 模块级 import 会与 chat_routes 那份绑定分叉 ⇒ 栅栏对随迁调用点变静默 no-op，故在调用点按模块属性解析：

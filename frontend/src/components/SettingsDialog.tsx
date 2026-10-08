@@ -452,13 +452,19 @@ export default function SettingsDialog({
         return;
       }
       for (const target of managed) {
-        const model = defaults[selected.id]?.[target] ?? "";
+        const marked = markedModels(selected, target);
+        // ponytail: 仅在用户保存时采用唯一已标型号；多个候选必须由用户选择默认。
+        const model = defaults[selected.id]?.[target] || (marked.length === 1 ? marked[0] : "");
         if (model) {
           roles[target] = { service_id: selected.id, model };
           continue;
         }
-        // 默认空但还有别的型号标着该角色 → 绑定保持不动（标记 ≠ 绑定）
-        if (markedModels(selected, target).length > 0) continue;
+        if (marked.length > 1) {
+          setSaveError(
+            `「${selected.name}」标了多个${shortLabel(target)}型号：点右侧铅笔，在「${shortLabel(target)}默认」中选择要使用的型号。`,
+          );
+          return;
+        }
         if (target === primary) {
           setSaveError(
             `「${selected.name}」还没有可用的${shortLabel(primary)}型号：请先给至少一个型号标「${shortLabel(primary)}」。`,
@@ -553,14 +559,21 @@ export default function SettingsDialog({
               <div className={cx("grid gap-3", managed.length > 1 && "grid-cols-2")}>
                 {managed.map((target) => {
                   const options = defaultOptions(draft, target);
+                  const marked = markedModels(draft, target);
                   return (
                     <Field
                       key={target}
                       label={`${shortLabel(target)}默认`}
-                      hint={options.length === 0 ? `先给至少一个型号标上「${shortLabel(target)}」` : undefined}
+                      hint={
+                        options.length === 0
+                          ? `先给至少一个型号标上「${shortLabel(target)}」`
+                          : marked.length === 1
+                            ? "只有一个已标型号，保存时使用它"
+                            : undefined
+                      }
                     >
                       <select
-                        value={defaults[draft.id]?.[target] ?? ""}
+                        value={defaults[draft.id]?.[target] || (marked.length === 1 ? marked[0] : "")}
                         onChange={(event) => setDefault(draft.id, target, event.target.value)}
                         className={inputCls}
                       >
@@ -855,8 +868,8 @@ export default function SettingsDialog({
               </div>
 
               <p className="mt-3 text-[11px] leading-4 text-faint">
-                型号在「编辑供应商」里勾选并标用途（可给多个型号标，也能标多个用途）：勾中的才出现在
-                {role === "chat" ? "对话页右下角的模型菜单" : "向量检索里"}；各角色的默认型号在表单上方的下拉里选。
+                在「编辑供应商」里勾选型号并标用途。每个用途只有一个已标型号时，保存后直接使用；
+                有多个型号时，请在表单上方选择默认型号。
                 {role === "chat" ? "没绑「视觉」默认就不能提问带图。" : ""}
               </p>
 
