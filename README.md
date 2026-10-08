@@ -12,6 +12,8 @@ The Chinese documentation below describes setup, usage, and current limitations.
 
 **已于 2026 年 10 月 8 日公开预发布。** [GitHub 仓库](https://github.com/bbaicao/zhilan)提供源码；[下载页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.0-public.1)提供 Windows 安装包、离线文档解析模型包及配套文件。下载后按该页面的 `SHA256SUMS.txt` 核验。源码 ZIP 保留发布标签时的快照，`main` 中的发布状态说明随后更新。
 
+**2026 年 10 月 9 日更新候选尚未发布。** 当前源码另含模型默认角色绑定修复、联网设置保存及 MiMo 原生搜索支持；上述 `v0.1.0-public.1` 下载包仍是旧发布快照，不含这些更新。新候选的变更与限制见 [版本变更](CHANGELOG.md)，发布身份和成品核对规则见 [发布说明](RELEASE.md)；不要将旧下载包当作当前候选的验证对象。
+
 **运行前提：安装包可以直接打开界面，但问答与向量索引需要先配置聊天、Embedding 模型服务。** 远程服务和启用鉴权的本机服务需要有效 API Key；当前版本连接免鉴权的本机 Ollama 时，也要填写非空占位 Key，例如 `ollama`。离线文档解析模型与这两类模型用途不同，导入解析模型后仍需要配置问答模型。
 
 **Windows 安装包未进行代码签名。** Windows SmartScreen 可能提示“未知发布者”或阻止首次运行。请核对文件来源与发布者提供的 SHA256；确认来源可信后，再按 Windows 提示操作。
