@@ -84,6 +84,33 @@ const deployFixture = repo('fixture-in-deployment-config');
 write(deployFixture, '.env.example', 'pass' + 'word=pw');
 git(deployFixture, 'add', '--all');
 check(deployFixture, 'fixture-value-in-config-fails', 'credentials');
+for (const [label, name, values] of [
+  ['web-llm', 'backend/tests/agent/test_web_llm.py', ['private-test-key', 'other-provider-key']],
+  ['web-settings', 'backend/tests/api/test_web_settings_delivery.py', ['search-secret', 'mimo-secret', 'private-mimo-key']],
+]) {
+  const root = repo(`reviewed-${label}`);
+  const body = values.map(value => 'api_' + 'key="' + value + '"').join('\n');
+  write(root, name, body);
+  git(root, 'add', '--all');
+  git(root, 'commit', '-m', 'Reviewed synthetic fixtures');
+  check(root, `${label}-exact-fixtures-and-history`, null, 0);
+  write(root, name, body + '\napi_' + 'key="newUnreviewedCredential923"');
+  git(root, 'add', '--all');
+  check(root, `${label}-new-secret-in-same-file`, 'credentials');
+  git(root, 'commit', '-m', 'Unreviewed credential control');
+  write(root, name, body);
+  git(root, 'add', '--all');
+  git(root, 'commit', '-m', 'Remove unreviewed credential control');
+  check(root, `${label}-deleted-secret-in-history`, 'credentials');
+  const wrongFile = repo(`wrong-file-${label}`);
+  write(wrongFile, 'backend/tests/unreviewed.py', body);
+  git(wrongFile, 'add', '--all');
+  check(wrongFile, `${label}-same-values-in-other-test`, 'credentials');
+  const deployment = repo(`deployment-${label}`);
+  write(deployment, '.env.example', body);
+  git(deployment, 'add', '--all');
+  check(deployment, `${label}-same-values-in-deployment`, 'credentials');
+}
 const runtime = repo('declared-runtime-path');
 write(runtime, 'README.md', readme + '\n下列是运行时生成的路径，不是仓库文件链接：`data/zhilan.db`、`models/`。\n');
 git(runtime, 'add', '--all');

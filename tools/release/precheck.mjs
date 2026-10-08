@@ -98,6 +98,12 @@ const fixtureValues = new Set([
   'synthetic-cause', 'synthetic-outer', 'another-secret',
   'authorization: bea' + 'rer tokenabcdefgh123456',
 ]);
+// Reviewed assignment literals only: neither the directory nor these values
+// in another file are exempt, including historical blobs.
+const reviewedFixtureValues = new Map([
+  ['backend/tests/agent/test_web_llm.py', new Set(['private-test-key', 'other-provider-key'])],
+  ['backend/tests/api/test_web_settings_delivery.py', new Set(['search-secret', 'mimo-secret', 'private-mimo-key'])],
+]);
 function placeholder(value, name = '') {
   const text = value.trim().replace(/\\n.*$/, '');
   if (!text || knownFakeValues.has(text.toLowerCase())) return true;
@@ -136,7 +142,7 @@ function credentialReasons(line, name) {
         (!/^[\x00-\x7F]+$/.test(value) && /^\s*(?:#|\/\/)/.test(line)))) continue;
     if (!quoted && (/^(?:true|false|\d+)$/i.test(value) ||
         (source && (/^[a-z_][a-z0-9_.]*(?:[([]|$)/i.test(value) || value.startsWith('(') || value.startsWith('++'))))) continue;
-    if (!placeholder(value, name)) reasons.push('credential-assignment');
+    if (!reviewedFixtureValues.get(name)?.has(value) && !placeholder(value, name)) reasons.push('credential-assignment');
   }
   return [...new Set(reasons)];
 }
