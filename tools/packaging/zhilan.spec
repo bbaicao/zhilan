@@ -37,11 +37,16 @@
 """
 
 import importlib.util
+import json
 import os
 import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.win32.versioninfo import (
+    FixedFileInfo, StringFileInfo, StringStruct, StringTable, VarFileInfo,
+    VarStruct, VSVersionInfo,
+)
 
 
 # --------------------------------------------------------------------------------------
@@ -53,6 +58,26 @@ from PyInstaller.utils.hooks import collect_data_files
 SPEC_DIR = Path(SPECPATH).resolve()          # <仓库根>/tools/packaging
 REPO_ROOT = SPEC_DIR.parents[1]              # <仓库根>
 BACKEND_DIR = REPO_ROOT / "backend"
+APP_VERSION = json.loads((REPO_ROOT / "frontend/package.json").read_text(encoding="utf-8"))["version"]
+VERSION_PARTS = tuple(int(part) for part in APP_VERSION.split(".")) + (0,)
+APP_VERSION_INFO = VSVersionInfo(
+    ffi=FixedFileInfo(
+        filevers=VERSION_PARTS, prodvers=VERSION_PARTS, mask=0x3F, flags=0,
+        OS=0x40004, fileType=1, subtype=0, date=(0, 0),
+    ),
+    kids=[
+        StringFileInfo([StringTable("040904B0", [
+            StringStruct("CompanyName", "bbaicao"),
+            StringStruct("FileDescription", "Zhilan"),
+            StringStruct("FileVersion", APP_VERSION),
+            StringStruct("InternalName", "zhilan"),
+            StringStruct("OriginalFilename", "zhilan.exe"),
+            StringStruct("ProductName", "Zhilan"),
+            StringStruct("ProductVersion", APP_VERSION),
+        ])]),
+        VarFileInfo([VarStruct("Translation", [1033, 1200])]),
+    ],
+)
 
 
 # --------------------------------------------------------------------------------------
@@ -364,6 +389,7 @@ exe = EXE(  # noqa: F821
     [],
     exclude_binaries=True,   # onedir：不把依赖塞进 exe
     name="zhilan",
+    version=APP_VERSION_INFO,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

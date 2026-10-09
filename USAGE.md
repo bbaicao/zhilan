@@ -2,7 +2,7 @@
 
 本文的数据、模型、日志和 start.log 位置是运行时生成的路径，不是仓库文件链接。
 
-本说明适用于知澜 v0.1.0，更新于 2026 年 10 月 7 日。源码启动步骤见 [README](README.md)，高级配置见 [CONFIGURATION](CONFIGURATION.md)。
+本说明适用于知澜 v0.1.1 候选，更新于 2026 年 10 月 9 日。本地交付批次为 `public-0.1.1-20261009`，新安装器名为 `zhilan-setup-0.1.1-public-ready-20261009.exe`；当前候选尚未发布，旧版下载包不能代表本版功能。源码启动步骤见 [README](README.md)，高级配置见 [CONFIGURATION](CONFIGURATION.md)。
 
 ## 安装前准备
 
