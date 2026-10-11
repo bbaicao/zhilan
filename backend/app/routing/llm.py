@@ -145,13 +145,15 @@ def build_classifier() -> Classifier | None:
 
     try:
         from cubeloop.providers.openai import OpenAIProvider
+        from cubeloop.providers.capability import CapabilityDescriptor
     except Exception as exc:  # noqa: BLE001 —— 缺依赖不致命，降级即可
         logger.warning("加载 LLM provider 失败（将按 fallback 降级）：%s", exc)
         return None
 
     try:
         provider = OpenAIProvider(
-            api_key=cfg.api_key, base_url=cfg.base_url or None, provider_id=cfg.provider
+            api_key=cfg.api_key, base_url=cfg.base_url or None, provider_id=cfg.provider,
+            capability=CapabilityDescriptor(),
         )
         from app.usage.instrumentation import observe_provider
         observe_provider(provider)

@@ -2,17 +2,17 @@
 
 Zhilan is a local-first knowledge base and retrieval-augmented question-answering application.
 It provides a Windows desktop interface, document ingestion, source references, and optional tools.
-Version: **v0.1.1** (unpublished prerelease candidate). Source code is licensed under **Apache-2.0**.
+Version: **v0.1.4 / v0.1.4-public.1** (public prerelease; known limitations apply). Source code is licensed under **Apache-2.0**.
 Chat and embedding require configured model services, such as an API provider or local Ollama.
 The Chinese documentation below describes setup, usage, and current limitations.
 
 ## 知澜：把自己的资料变成可检索的知识库
 
-知澜将文档、笔记与对话放在本机，帮助你从自己的资料中查找信息并生成带来源的回答。当前应用版本是 **v0.1.1**，准备日期为 **2026 年 10 月 9 日**，计划预发布标签为 **v0.1.1-public.1**，尚未公开上传。Windows 安装包、配套模型包及校验方式见 [发布附件说明](ATTACHMENTS.md)。
+知澜将文档、笔记与对话放在本机，帮助你从自己的资料中查找信息并生成带来源的回答。当前源码版本是 **v0.1.4**，整理日期为 **2026 年 10 月 11 日**，公开预发布标识为 **v0.1.4-public.1**。源码、Windows 完整程序和安装器见[本版下载页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.4-public.1)，实际发布身份以页面、标签及同批清单为准。成品及校验边界见 [发布附件说明](ATTACHMENTS.md)。
 
-**旧版 v0.1.0-public.1 于 2026 年 10 月 8 日公开预发布。** [GitHub 仓库](https://github.com/bbaicao/zhilan)与[旧版下载页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.0-public.1)保留原快照及附件；不要将旧下载包当作当前候选的验证对象。当前 v0.1.1 仅准备本地交付，尚未推送或上传。
+**旧版 v0.1.0-public.1 于 2026 年 10 月 8 日公开预发布。** [GitHub 仓库](https://github.com/bbaicao/zhilan)与[旧版下载页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.0-public.1)保留原快照及附件；旧下载包不代表当前源码的验证对象。v0.1.1 本地包也保留原身份。
 
-**v0.1.1 / v0.1.1-public.1 候选尚未发布。** 当前源码含模型默认角色绑定修复、联网设置保存及 MiMo 原生搜索支持。本地交付批次为 `public-0.1.1-20261009`，程序和安装器已重新构建，实际文件版本及产品版本均核对为 0.1.1；冻结程序自检、内嵌版本声明及七件前端文件核对通过，本批未执行安装或真实供应商请求。旧 `public-web-20261009-r2` 不属于 v0.1.1。变更与限制见 [版本变更](CHANGELOG.md)，发布身份和成品核对规则见 [发布说明](RELEASE.md)。
+**v0.1.4 作为公开预发布／试用版交付，仍有已知质量与安装验证限制。** 当前更新包括模型设置、跨轮图片可用性、回答完成／截断／失败状态、停止与断连收尾、会话恢复和实际数据后端展示；已有联网与模型角色保存功能保留。本轮补修代码／配置上传的原始数据释放顺序，保留提前释放资源的行为。源码 ZIP、Windows 程序与安装器使用独立发布目录及同批清单核对，旧包保持原身份。变更与限制见 [版本变更](CHANGELOG.md)，发布身份和成品核对规则见 [发布说明](RELEASE.md)。
 
 **运行前提：安装包可以直接打开界面，但问答与向量索引需要先配置聊天、Embedding 模型服务。** 远程服务和启用鉴权的本机服务需要有效 API Key；当前版本连接免鉴权的本机 Ollama 时，也要填写非空占位 Key，例如 `ollama`。离线文档解析模型与这两类模型用途不同，导入解析模型后仍需要配置问答模型。
 
@@ -82,7 +82,7 @@ Pop-Location
 
 ## 开发检查与构建
 
-公开内容审计检查 **Git 暂存区（索引）和全部可达 refs 的历史**。它不扫描未暂存修改、未跟踪文件或被忽略的附件；仅修改文件后直接运行，不能证明新内容已受检。先在仓库根目录查看状态和差异：
+公开内容审计保留 **Git 暂存区（索引）和全部可达 refs 的历史** 检查，并可扫描当前未暂存修改、非忽略的新文件、明确指定的导出源码与附件。先在仓库根目录查看状态和差异：
 
 ```powershell
 git status --short
@@ -90,29 +90,30 @@ git diff
 git diff --cached
 ```
 
-逐项审阅确认要公开的内容后，暂存已跟踪文件的修改；有新增文件时，另对每个已审阅的公开文件执行 `git add -- "文件路径"`，不要将配置、资料或附件一并加入：
+检查当前工作区无需先暂存，也不会改动索引或提交：
 
 ```powershell
-git add -u
-# 有新增文件时，逐路径执行 git add -- "已审阅的新增公开文件路径"
-git diff --cached
-node tools/release/precheck.mjs
+node tools/release/precheck.mjs --working-tree
 node tools/release/precheck-selfcheck.mjs
 ```
 
-`precheck.mjs` 检查暂存内容、全部可达 refs 的历史、文档链接和敏感内容；`precheck-selfcheck.mjs` 使用临时样例验证扫描器能拦住问题。提交或标签变化后应再次运行检查。被忽略的安装包等附件需另行审阅，详细流程见 [发布与维护说明](RELEASE.md)。这些检查不代表产品的模型回答质量通过，也不替代实际安装与运行验收。
+`precheck-selfcheck.mjs` 用正反控制检查拒绝能力。最终材料使用 `--source-dir` 与 `--artifact-dir` 指定：源码 ZIP 会实际解压并按清单逐件核对；Windows 附件检查文件哈希和同批身份，内嵌代码另由冻结核验提供证据。未提供附件输入时该项为 Unverified。详细流程见 [发布与维护说明](RELEASE.md)。检查不替代模型质量、许可来源和安装验收。
 
 后端测试放在 [backend/tests](backend/tests)。只运行与你的修改直接相关的测试。测试收集时会导入配置模块，因此即使是模型角色配置测试，也可能在测试夹具生效前读取仓库根目录 `.env`。
 
-下面的命令只用于**已经准备好的独立测试源码副本**：副本不携带真实 `.env`、资料库、索引、模型和日志，测试所需配置及数据目录均指向独立临时位置；运行环境也不注入真实服务凭据或生产数据路径。不要在日常使用的源码目录照搬运行。这里没有提供或验证一套自动隔离脚本。
+本次新增 [隔离定向检查入口](backend/scripts/check_release_ready.py)。只用于**不携带真实 `.env`、资料库、索引、模型和日志的独立源码副本**，使用仓库外已准备好的 Python 环境及新的状态目录。入口会拒绝真实 `.env`、剥离凭据环境变量并阻断外网，写入独立 SQLite、JUnit 和结果 JSON。选择相同状态目录依次运行两个重启模式，才能检查跨进程恢复：
 
 ```powershell
-Push-Location backend
-.\.venv\Scripts\python.exe -m pytest tests/test_model_roles.py -q
-Pop-Location
+$Python = Read-Host '请输入仓库外测试环境的 python.exe 绝对路径'
+$TestSource = Read-Host '请输入无真实配置和数据的源码副本绝对路径'
+$TestState = Read-Host '请输入副本外新的测试状态目录绝对路径'
+foreach ($Mode in @('upload', 'targeted', 'restart-seed', 'restart-read')) {
+    & $Python "$TestSource\backend\scripts\check_release_ready.py" --source $TestSource --state $TestState --mode $Mode
+    if ($LASTEXITCODE -ne 0) { throw "检查失败：$Mode" }
+}
 ```
 
-前端构建的统一入口是 [frontend/scripts/build.mjs](frontend/scripts/build.mjs)。Windows 打包工具在 [tools/packaging](tools/packaging)，需要另行准备与锁定依赖匹配的构建环境、前端构建结果和安装器所需资源。具体约定见 [发布与维护说明](RELEASE.md)。
+本轮四个串行批次按身份去重为 411 通过／1 原有跳过，共 412 项，非一次完整批次、非全量回归。使用合成资料与离线服务替身，不代表真实模型质量。前端构建的统一入口是 [frontend/scripts/build.mjs](frontend/scripts/build.mjs)。Windows 打包工具在 [tools/packaging](tools/packaging)，需要另行准备与锁定依赖匹配的构建环境、前端构建结果和安装器所需资源。具体约定见 [发布与维护说明](RELEASE.md)。
 
 ## 数据保存与升级
 

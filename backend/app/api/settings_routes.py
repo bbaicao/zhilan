@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -46,7 +47,6 @@ from app.api.settings_schemas import (
     RoleIn,
     WebModelsIn,
     current_payload,
-    rerank_target,
 )
 from app.core.net_guard import OutboundBlocked, assert_outbound_url_safe
 
@@ -58,7 +58,6 @@ from app.core.config import (
     ROLE_LABELS,
     build_registry_from_legacy,
     dump_registry,
-    ensure_service_registry,
     new_service_id,
     parse_model_roles,
     parse_role_list,
@@ -165,7 +164,7 @@ def _with_unknown_roles(roles: dict[str, dict[str, str]]) -> dict:
     raw = _parse_json_object(settings.MODEL_ROLES)
     out: dict[str, Any] = dict(roles)
     for key, value in raw.items():
-        if key not in out and isinstance(value, dict) and value:
+        if key not in ALL_ROLE_KEYS and key not in out and isinstance(value, dict) and value:
             out[key] = value
     return out
 
@@ -333,17 +332,11 @@ def _resolve_group(group, current: dict[str, str], keys: dict[str, str], updates
 # --- 重排序（条目 28 / 口径 A）------------------------------------------------
 
 
-def _current_rerank_model() -> str:
-    binding = settings.rerank_binding
-    return (binding or {}).get("model", "") if binding else ""
-
-
-def _resolve_rerank(item) -> dict:
+def _resolve_rerank(item, services: list[dict], roles: dict, updates: dict[str, str]) -> dict:
     """校验重排序设置，返回**落盘计划**；不合法一律 400 且一个字都不落盘。
 
     R-1..R-4 四条校验（文案中文、把「缺什么怎么补」写清楚）+ 目标服务的选择与保护。
-    真正的写盘在 `_apply_rerank`（它要动 `MODEL_SERVICES` / `MODEL_ROLES` 两张表，
-    而那两张表的最终内容还取决于同一请求里的 `services` / `roles` 段）。
+    只读取本次提交的候选注册表；遗留迁移也只并入 updates，统一在全部校验后落盘。
     """
     # R-1：未知服务商
     if item.provider is not None and rerank_spec.provider_spec(item.provider) is None:
@@ -352,7 +345,30 @@ def _resolve_rerank(item) -> dict:
             status_code=400, detail=f"未知的重排序服务商：{item.provider}。可选：{allowed}"
         )
 
-    target, source = rerank_target()
+    binding = roles.get(RERANK_ROLE) or {}
+    embed = roles.get("embed") or {}
+    target = None
+    source = ""
+    for bound, label in ((binding, "binding"), (embed, "embed")):
+        target = next((row for row in services if row["id"] == bound.get("service_id")), None)
+        if target is not None:
+            source = label
+            break
+
+    # Explicit registry replacement must not resurrect a deleted service from flat keys.
+    if target is None and not settings.has_service_registry and "MODEL_SERVICES" not in updates:
+        candidate = settings.model_copy(update={key: _stored_value(key, value) for key, value in updates.items()})
+        preview = build_registry_from_legacy(candidate)
+        if preview:
+            preview_services, preview_roles = preview
+            embed = preview_roles.get("embed") or {}
+            target = next((row for row in preview_services if row["id"] == embed.get("service_id")), None)
+            if target is not None:
+                roles = _with_unknown_roles(preview_roles)
+                binding = roles.get(RERANK_ROLE) or {}
+                updates.update(dump_registry(preview_services, roles))
+                source = "embed"
+
     current_provider = rerank_spec.normalize_provider(str((target or {}).get("provider") or ""))
     provider = rerank_spec.normalize_provider(
         item.provider if item.provider is not None else current_provider
@@ -361,7 +377,7 @@ def _resolve_rerank(item) -> dict:
 
     enabled = bool(settings.RAG_ENABLE_RERANK) if item.enabled is None else bool(item.enabled)
     model = (
-        item.model if item.model is not None else _current_rerank_model()
+        item.model if item.model is not None else str(binding.get("model") or "")
     ).strip()
     base_url = (
         item.base_url if item.base_url is not None else str((target or {}).get("base_url") or "")
@@ -379,29 +395,20 @@ def _resolve_rerank(item) -> dict:
     if enabled and not ok:
         raise HTTPException(status_code=400, detail=detail)
 
-    # 目标服务：绑定那条 → 沿用「向量模型」那条 → 可一次性迁移的扁平键 → 都没有就 400
-    need_migration = False
-    if target is None:
-        preview = build_registry_from_legacy(settings)
-        if preview:
-            preview_services, preview_roles = preview
-            embed = preview_roles.get("embed")
-            if embed:
-                preview_target = next(
-                    (row for row in preview_services if row["id"] == embed["service_id"]), None
-                )
-                if preview_target is not None:
-                    target, source, need_migration = preview_target, "embed", True
     if target is None and (enabled or model or base_url or incoming_key):
         raise HTTPException(
             status_code=400, detail="请先在设置页配置一条向量模型服务，再开启重排序。"
         )
 
     # 地址保护：地址本身就是「向量模型」那条服务的 ⇒ 不许单独改（改了会静默换掉向量路的地址）
-    embed = settings.roles.get("embed") or {}
     is_embed_service = bool(target) and embed.get("service_id") == target["id"]
-    if base_url and target is not None and base_url != str(target.get("base_url") or ""):
-        if is_embed_service:
+    if is_embed_service:
+        previous = settings.service_by_id(target["id"])
+        previous_embed = settings.roles.get("embed") or {}
+        protected_base = str(target.get("base_url") or "")
+        if previous is not None and previous_embed.get("service_id") == target["id"]:
+            protected_base = str(previous.get("base_url") or "")
+        if base_url and base_url != protected_base:
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -413,7 +420,8 @@ def _resolve_rerank(item) -> dict:
     # R-4：开着、需要 Key 而没有可用 Key
     if enabled and spec is not None and spec.needs_key:
         has_key = bool(incoming_key) or bool(str(target.get("api_key") or "").strip())
-        if not has_key and not _is_local_service(target):
+        effective_target = {**target, "base_url": base_url or str(target.get("base_url") or "")}
+        if not has_key and not _is_local_service(effective_target):
             raise HTTPException(
                 status_code=400, detail="开启重排序需要可用的 API Key。" + spec.requirement
             )
@@ -426,15 +434,17 @@ def _resolve_rerank(item) -> dict:
         "incoming_key": incoming_key,
         "target_id": (target or {}).get("id", ""),
         "source": source,
-        "need_migration": need_migration,
         "is_embed_service": is_embed_service,
     }
 
 
 def _is_local_service(service: dict | None) -> bool:
-    """本机地址允许空 Key（口径同 `app/api/__init__.py::_require_config`）。"""
+    """只允许实际本机主机名免 Key，远端地址包含本机字样不算本机。"""
     base = str((service or {}).get("base_url") or "")
-    return "127.0.0.1" in base or "localhost" in base
+    try:
+        return urlsplit(base).hostname in ("127.0.0.1", "localhost")
+    except ValueError:
+        return False
 
 
 def _apply_rerank(plan: dict, updates: dict[str, str]) -> None:
@@ -448,11 +458,6 @@ def _apply_rerank(plan: dict, updates: dict[str, str]) -> None:
     - `MODEL_ROLES` 同理：从原始 JSON 起手，只动 `rerank` 一个键（P2-4）；
     - 没有被改动的表**根本不进 `updates`** ⇒ 不落盘 = 不可能顺手改写。
     """
-    if plan["need_migration"]:
-        # 幂等的一次性迁移（`config.ensure_service_registry`）：把 `.env` 的旧扁平配置收成注册表。
-        # 只有走到这里（用户要开重排、而注册表还不存在）才会发生，且它自己负责落盘与失败提示。
-        ensure_service_registry(settings)
-
     services_raw = _parse_json_list(updates.get("MODEL_SERVICES") or settings.MODEL_SERVICES)
     roles_raw = _parse_json_object(updates.get("MODEL_ROLES") or settings.MODEL_ROLES)
     services_changed = False
@@ -559,7 +564,7 @@ async def put_settings(payload: SettingsIn) -> dict:
     if payload.data is not None:
         raise HTTPException(status_code=400, detail=DATA_PUT_REJECTED)
 
-    rerank_plan = _resolve_rerank(payload.rerank) if payload.rerank is not None else None
+    rerank_plan = _resolve_rerank(payload.rerank, services, roles, updates) if payload.rerank is not None else None
     if rerank_plan is not None:
         _apply_rerank(rerank_plan, updates)
 

@@ -42,11 +42,15 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import logging
+import re
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field, replace
 
+from anyio import CancelScope
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import inspect as sa_inspect, select
@@ -354,7 +358,7 @@ UNKNOWN_SKILL_ID_PREFIX = "未知的技能 id："
 UNKNOWN_SKILL_ID_SUFFIX = "。可在设置 → 技能 / MCP 里查看可用技能。"
 
 
-def validate_request(payload: ChatRequest) -> tuple[str, list[str]]:
+def validate_request(payload: ChatRequest, images: list[str] | None = None) -> tuple[str, list[str]]:
     """契约校验，返回 ``(正文, 图片列表)``。
 
     顺序与老基线一致：未配模型 → 空输入 → 图片超限。
@@ -364,7 +368,7 @@ def validate_request(payload: ChatRequest) -> tuple[str, list[str]]:
     不再被 400「尚未配置对话模型」误拒；带图轮装配不到时 400 文案对齐 v1.0.13
     提示族（``VISION_NOT_CONFIGURED_HINT``），且发生在**流开始前**、零 DB 副作用。
     """
-    images = chat_images(payload)
+    images = chat_images(payload) if images is None else images
     if images:
         if resolve_vision_model() is None:
             raise HTTPException(status_code=400, detail=answer_mod.VISION_NOT_CONFIGURED_HINT)
@@ -410,6 +414,85 @@ def validate_request(payload: ChatRequest) -> tuple[str, list[str]]:
                 detail="；".join(unavailable) + "。可在设置 → 技能 / MCP 里启用或补全配置。",
             )
     return text, images
+
+
+_IMAGE_REFERENCE = re.compile(
+    r"(?:这|那|上|前|刚才|之前).{0,4}(?:图|照片|截图)|(?:图中|图里|图上|图片里|照片里)"
+    r"|\b(?:this|that|previous|last)\s+(?:image|picture|photo|screenshot)\b", re.I,
+)
+_IMAGE_FOLLOWUP = re.compile(
+    r"^(?:为什么|怎么回事|什么意思|原因呢|解释一下|详细说说|继续解释|why|how so)[？?！!。.\s]*$", re.I,
+)
+HISTORY_IMAGE_HINT = "当前没有可用的相关图片，或图片超出上下文限制，请重新附图后重试。"
+
+
+async def prepare_request(db: AsyncSession, payload: ChatRequest):
+    """Select one bounded, same-chat image round without changing stored history."""
+    images = chat_images(payload)
+    text = (payload.message or "").strip()
+    explicit = bool(_IMAGE_REFERENCE.search(text))
+    dependent = bool(_IMAGE_FOLLOWUP.fullmatch(text))
+    source = None
+    if not images and (explicit or dependent) and payload.chat_id is not None:
+        chat = await repo.get_chat(db, payload.chat_id)
+        if chat is None:
+            raise HTTPException(status_code=404, detail="会话不存在")
+        rows = list((await db.execute(
+            select(Message).where(
+                Message.chat_id == chat.id, Message.role.in_(("user", "assistant")),
+                Message.id > (chat.compressed_up_to or 0),
+            ).order_by(Message.id.desc()).limit(query_mod.HISTORY_LIMIT)
+        )).scalars())[::-1]
+        users = [row for row in rows if row.role == "user"]
+        # ponytail: conservative image grammar; ambiguous free-form follow-ups require reattachment.
+        if explicit or (users and users[-1].images):
+            candidates = [row for row in users if row.images]
+            if not candidates:
+                raise HTTPException(status_code=400, detail=HISTORY_IMAGE_HINT)
+            row = candidates[-1]
+            images = list(row.images)
+            if len(images) > 4 or sum(_image_decoded_bytes(item) for item in images) > MAX_UPLOAD_BYTES:
+                raise HTTPException(status_code=400, detail=HISTORY_IMAGE_HINT)
+            try:
+                if any(not base64.b64decode(item.split(",", 1)[-1], validate=True) for item in images):
+                    raise ValueError("empty image")
+            except (ValueError, binascii.Error):
+                raise HTTPException(status_code=400, detail=HISTORY_IMAGE_HINT) from None
+            source = (row.id, [
+                {"role": item.role, "content": item.content}
+                for item in rows[rows.index(row):]
+            ])
+    elif not images and explicit:
+        raise HTTPException(status_code=400, detail=HISTORY_IMAGE_HINT)
+    text, images = validate_request(payload, images)
+    return text, images, source
+
+
+def history_image_available(plan: TurnPlan, model) -> bool:
+    source = getattr(plan, "image_history_source", None)
+    if source is None:
+        return True
+    source_id, tail = source
+    if source_id <= (plan.chat.compressed_up_to or 0) or plan.history[-len(tail):] != tail:
+        return False
+    context = answer_context(plan)
+    try:
+        _, _, budget = answer_mod.assemble_answer_prompt(
+            plan.question, plan.history, model=model, images=plan.images,
+            materials_text=context["materials_text"], memory_text=plan.memory_text,
+            tool_context=context["tool_context"],
+        )
+    except answer_mod.ContextBudgetExceeded:
+        return False
+    return budget["history_kept"] >= len(tail)
+
+
+def terminal_state(plan: TurnPlan, event: str) -> dict:
+    status = "failed" if event == "error" else "stopped" if event == "stopped" else getattr(plan, "generation_status", "completed")
+    reason = "aborted" if status == "stopped" else getattr(plan, "finish_reason", None)
+    if status == "failed" and reason == "stop":
+        reason = None
+    return {"generation_status": status, "finish_reason": reason}
 
 
 # --------------------------------------------------------------------------
@@ -536,7 +619,8 @@ async def build_turn_plan(
 
     # --- ③ 澄清判定：在路由与检索之前 ---------------------------------
     rounds = int(getattr(chat, "clarify_rounds", 0) or 0)
-    if agent_mode in AGENT_MODES and not rewrite.needs_clarify:
+    if images or (agent_mode in AGENT_MODES and not rewrite.needs_clarify):
+        # Current images supply context that the text-only clarification cannot inspect.
         # 第 1 批 ①：有效 Agent 模式跳过短句硬短路（不改 clarify 纯函数）。
         # 上限保护仍读同一计数；不在这里另写 routing/decided（A6 甲，并进 route() 那一条）。
         assume = rounds >= clarify_mod.max_rounds()
@@ -857,6 +941,10 @@ async def _generate(plan: TurnPlan, model) -> str:
     # 新字段不得把替身驱动的老用例打红）。
     plan_images = getattr(plan, "images", None)
     ctx = answer_context(plan)
+    if not history_image_available(plan, model):
+        plan.generation_status = "failed"
+        plan.error_hint = HISTORY_IMAGE_HINT
+        return HISTORY_IMAGE_HINT
     result = await answer_mod.answer_direct(
         plan.question,
         history=plan.history,
@@ -1205,6 +1293,11 @@ async def stream_tokens(
     # ⚠️ **Agent 分支跑完之后才取**（上面那段 ``run_agent_turn`` 会写回 ``plan.tool_context``）
     # ——本批的第一性质（D8）就落在这里：``tool_context`` 为空时下面两次调用与改前逐字相同。
     ctx = answer_context(plan)
+    if not history_image_available(plan, model):
+        plan.generation_status = "failed"
+        plan.error_hint = HISTORY_IMAGE_HINT
+        yield "error", plan.error_hint
+        return
     try:
         system_text, built, _budget = answer_mod.assemble_answer_prompt(
             plan.question, plan.history, materials_text=ctx["materials_text"],
@@ -1458,6 +1551,7 @@ async def persist_turn(
         filters=plan.filters,
         skill_ids=plan.skill_ids or None,
         reasoning=reasoning or None,
+        thinking=terminal_state(plan, "done"),
         agent_trace=agent_trace,
         answer_source=plan.answer_source,
     )
@@ -1789,6 +1883,7 @@ async def persist_stopped_turn(
             filters=plan.filters,
             skill_ids=plan.skill_ids or None,
             reasoning=reasoning or None,
+            thinking=terminal_state(plan, "stopped"),
             agent_trace=agent_trace,
         )
         await db.commit()
@@ -1876,7 +1971,7 @@ NON_STREAM_AGENT_MODE_DETAIL = (
 )
 
 
-def guard_non_stream_agent_mode(payload: ChatRequest) -> None:
+def guard_non_stream_agent_mode(payload: ChatRequest, images: list[str] | None = None) -> None:
     """非流式 ``/api/chat`` 的能力边界：**解析后的有效模式**是 Agent ⇒ 400（D9/D10/D11）。
 
     判定点（D10）：**模式解析之后**（``resolve_agent_mode``）、** ``build_turn_plan`` 之前**。
@@ -1897,20 +1992,21 @@ def guard_non_stream_agent_mode(payload: ChatRequest) -> None:
     ⇒ 有效模式 = ``off`` ⇒ 走正常回答。这是「按解析后的有效模式判断」的**必然归属**，
     **不是**本函数开的例外（A12 的第四态就钉这条，防止有人按请求原文判）。
     """
-    if resolve_agent_mode(payload) in AGENT_MODES:
+    if resolve_agent_mode(payload, images) in AGENT_MODES:
         raise HTTPException(status_code=400, detail=NON_STREAM_AGENT_MODE_DETAIL)
 
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
     """同步问答（契约 §7.1）。"""
-    text, images = validate_request(payload)
+    text, model_images, image_source = await prepare_request(db, payload)
+    images = chat_images(payload)
     # 能力边界（第 0 批 · ②）：**解析后的有效模式**是 Agent ⇒ 可读的 400。
     # 位置有意紧贴 ``validate_request`` 之后：校验类的 400/404 优先（返回更贴题的提示），
     # 而它早于 ``build_turn_plan``（那里会写库 / 走缓存），所以拒绝是**零副作用**的。
-    guard_non_stream_agent_mode(payload)
+    guard_non_stream_agent_mode(payload, model_images)
     # 回归修复：带图轮装配**视觉角色**（vision_config）；无图轮逐字不变。
-    model = resolve_vision_model() if images else resolve_chat_model()
+    model = resolve_vision_model() if model_images else resolve_chat_model()
     # ❗ 辅助链路模型（推理等级回流）：**必须显式注入三处形参**，否则它们会自己去
     # `answer.build_chat_model()` 真装配 ⇒ 把用户配的思考参数带进内部编排
     #（A14 的「三条辅助链路请求体不含思考键」就是这么被踩破的）。
@@ -1923,8 +2019,11 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
     from app.usage.instrumentation import usage_scope
     with usage_scope(db=db):
         plan = await build_turn_plan(
-            db, payload, text, images, clarify_model=aux, compaction_model=aux
+            db, payload, text, model_images, clarify_model=aux, compaction_model=aux
         )
+    plan.image_history_source = image_source
+    if not history_image_available(plan, model):
+        raise HTTPException(status_code=400, detail=HISTORY_IMAGE_HINT)
     # 条目 4.4：**同步链路也要铸**一次尝试 id（老基线只在流式那条铸 ⇒ 只抄那一条会让
     # 本端点的 ``assistant/attempt`` 永远缺席）。两条链路共用同一个入口函数。
     start_attempt(plan)
@@ -1968,6 +2067,7 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
             skill_ids=plan.skill_ids,
             agent_trace=None,
             answer_source=plan.answer_source,
+            generation_status="failed", finish_reason=plan.finish_reason,
         )
 
     if plan.generation_status == "stopped":
@@ -1976,6 +2076,7 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
             chat_id=plan.chat.id, message=display_text, refs=[], kind="stopped",
             reasoning="", thinking=None, skill_ids=plan.skill_ids,
             agent_trace=None, answer_source=None,
+            generation_status="stopped", finish_reason=plan.finish_reason,
         )
     citations = finalize_citations(plan, raw_text)
     await persist_turn(
@@ -2020,15 +2121,26 @@ async def chat(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
         skill_ids=plan.skill_ids,
         agent_trace=None,
         answer_source=plan.answer_source,
+        generation_status=plan.generation_status, finish_reason=plan.finish_reason,
     )
+
+
+class _ChatStreamingResponse(StreamingResponse):
+    async def stream_response(self, send) -> None:
+        try:
+            await super().stream_response(send)
+        finally:
+            with CancelScope(shield=True):
+                await self.body_iterator.aclose()
 
 
 @router.post("/chat/stream")
 async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
     """流式问答（SSE 最小形态：``meta → token* → done``，契约 §2）。"""
-    text, images = validate_request(payload)
+    text, model_images, image_source = await prepare_request(db, payload)
+    images = chat_images(payload)
     # 回归修复：带图轮装配**视觉角色**（vision_config）；无图轮逐字不变。
-    model = resolve_vision_model() if images else resolve_chat_model()
+    model = resolve_vision_model() if model_images else resolve_chat_model()
     # ❗ 辅助链路模型（推理等级回流）：与 `/chat` 逐字同口径（见那边的注释）——
     # 澄清 / 压缩 / Agent 决策 / 记忆抽取四处一律用 `aux`，用户配的思考参数只喂最终答案。
     aux = resolve_aux_model()
@@ -2052,8 +2164,11 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
         from app.usage.instrumentation import usage_scope
         with usage_scope(db=db):
             plan = await build_turn_plan(
-                db, payload, text, images, clarify_model=aux, compaction_model=aux
+                db, payload, text, model_images, clarify_model=aux, compaction_model=aux
             )
+        plan.image_history_source = image_source
+        if not history_image_available(plan, model):
+            raise HTTPException(status_code=400, detail=HISTORY_IMAGE_HINT)
         if plan.needs_model and plan.agent_mode in AGENT_MODES:
             plan.materials_finalized = False
         # 条目 4.4：流式链路的尝试 id 在这里铸（与同步链路同一个入口）。铸在流开始**之前**，
@@ -2065,9 +2180,64 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
         stop_registry.unregister(payload.request_id, stop_event)
         raise
 
+    display_chunks: list[str] = []
+    reasoning_parts: list[str] = []
+    agent_steps: list[dict] = []
+    stopped_task: asyncio.Task | None = None
+    terminal_started = False
+
+    async def _save_stopped() -> None:
+        plan.generation_status = "stopped"
+        plan.finish_reason = "aborted"
+        trace = plan.agent_trace if plan.agent_trace is not None else (
+            {"mode": plan.agent_mode, "steps": list(agent_steps)} if agent_steps else None
+        )
+        try:
+            await persist_stopped_turn(
+                db, plan, "".join(display_chunks), reasoning="".join(reasoning_parts),
+                images=images, agent_trace=trace,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("停止轮落库失败（仍以 stopped 收尾）：%s: %s", exc.__class__.__name__, exc)
+
+    def _stopped_save() -> asyncio.Task:
+        nonlocal stopped_task
+        if stopped_task is None:
+            stopped_task = asyncio.create_task(_save_stopped())
+        return stopped_task
+
+    async def _wait_closeout(task: asyncio.Task) -> None:
+        cancelled = False
+        with CancelScope(shield=True):
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    cancelled = True
+            task.result()
+        if cancelled:
+            raise asyncio.CancelledError
+
+    async def _persist_user_turn_closeout(
+        *,
+        images: list[str] | None = None,
+        note: str | None = None,
+    ) -> None:
+        task = asyncio.create_task(persist_user_turn(db, plan, images=images, note=note))
+        await _wait_closeout(task)
+
     async def _events() -> AsyncIterator[bytes]:
         # 3.3 guard 器官：收尾（done / error / stopped）**恰好一次**——登记在 guard 上，帧由这里发
         guard = observe.StreamGuard()
+        producer = _produce(guard)
+
+        async def closeout() -> None:
+            await producer.aclose()
+            if stopped_task is not None:
+                await stopped_task
+            elif not guard.finished and not terminal_started and plan.generation_status != "failed":
+                await _stopped_save()
+
         try:
             # meta：流开始
             # 回归修复：meta 帧的 yield 必须在 try 之内——客户端在 meta 帧后、下一帧前
@@ -2079,7 +2249,7 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
             yield sse({"type": "meta", "chat_id": plan.chat.id, "skill_ids": plan.skill_ids})
 
             try:
-                async for frame in _produce(guard):
+                async for frame in producer:
                     yield frame
             except Exception as exc:  # noqa: BLE001 —— I5：内层没接住的意外，这里兜底收尾
                 logger.warning("流式流程出现未捕获异常：%s: %s", exc.__class__.__name__, exc)
@@ -2088,6 +2258,7 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
                         {
                             "type": "error",
                             "detail": f"生成失败，请稍后重试。（{exc.__class__.__name__}）",
+                            **terminal_state(plan, "error"),
                         }
                     )
 
@@ -2095,22 +2266,24 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
                 # 任何分支忘了收尾都在这里补上——**绝不静默结束**（用户界面会一直转圈）
                 guard.error()
                 logger.warning("流式流程结束时没有收尾事件，已由 guard 补一条 error")
-                yield sse({"type": "error", "detail": "回答流程异常结束，请重试。"})
+                yield sse({"type": "error", "detail": "回答流程异常结束，请重试。", **terminal_state(plan, "error")})
         finally:
-            # 流结束（正常 / 停止 / 出错 / 客户端断开）一律注销停止登记，别让表越积越大
-            stop_registry.unregister(payload.request_id, stop_event)
+            # ponytail: 请求退出前等同一份收口完成；取消继续上抛，避免 session 先关或重复留档。
+            finalizer = asyncio.create_task(closeout())
+            try:
+                await _wait_closeout(finalizer)
+            finally:
+                stop_registry.unregister(payload.request_id, stop_event)
 
     async def _produce(guard) -> AsyncIterator[bytes]:
         """产 ``token`` / ``reasoning`` / ``agent`` / ``stopped`` / ``done`` / ``error`` 帧。
 
         每个收尾点都**先向 guard 登记**再发帧；停止信号的检查方式见下面的赛跑注释。
         """
+        nonlocal terminal_started
         chunks: list[str] = []
         prefix = ""
         prefix_sent = False
-        display_chunks: list[str] = []
-        reasoning_parts: list[str] = []
-        agent_steps: list[dict] = []
         stopped = False
         source = None
         getter: asyncio.Task | None = None
@@ -2148,12 +2321,13 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
                         await log_attempt(
                             db, plan.chat.id, plan, attempt_mod.ATTEMPT_ABORTED
                         )
-                        await persist_user_turn(db, plan, images=images)
+                        await _persist_user_turn_closeout(images=images)
                         if guard.error():
                             yield sse(
                                 {
                                     "type": "error",
                                     "detail": f"生成失败，请稍后重试。（{exc.__class__.__name__}）",
+                                    **terminal_state(plan, "error"),
                                 }
                             )
                         return
@@ -2178,9 +2352,7 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
                                 db, plan.chat.id, plan, attempt_mod.ATTEMPT_ABORTED
                             )
                             try:
-                                await persist_user_turn(
-                                    db, plan, images=images, note=str(payload)
-                                )
+                                await _persist_user_turn_closeout(images=images, note=str(payload))
                             except Exception as exc:  # noqa: BLE001
                                 logger.warning(
                                     "失败轮的用户消息落库失败：%s: %s",
@@ -2188,7 +2360,7 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
                                     exc,
                                 )
                             if guard.error():
-                                yield sse({"type": "error", "detail": str(payload)})
+                                yield sse({"type": "error", "detail": str(payload), **terminal_state(plan, "error")})
                             return
                         else:
                             chunks.append(payload)
@@ -2213,43 +2385,32 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
                     stopped = True
                     break
         finally:
-            # 四种出口（正常 / 停止 / 出错 / 断开）都回收在途任务与生成器：
-            # 取消取增量任务会把 CancelledError 注入悬挂点，厂商 HTTP 流随之关闭。
-            for task in (getter, stop_wait):
-                if task is not None and not task.done():
-                    task.cancel()
-                    try:
-                        await task
-                    except BaseException:  # noqa: BLE001 —— 取消是预期路径
-                        pass
-            # ⚠️ **必须在这里显式关闭内层生成器，而且要在 GC 之前**（条目 4.3 对抗性核验的 P1）：
-            # ``stream_tokens`` 是异步生成器，它内部又 ``async for`` 着 ``run_agent_turn``
-            # （后者持有 ``_audit_run`` 的 finally：``agent_runs.status`` 收口 + 材料回写）。
-            # 只把 ``getter`` 任务 cancel 掉时，被取消的可能是**尚未启动**的 ``__anext__``
-            # ——那时 ``GeneratorExit`` 并没有注入到生成器内部，生成器要等**GC** 才被关闭：
-            # 它内部的 finally 被延后到那一刻才跑，而那时请求的 ``AsyncSession`` 早已关闭 ⇒
-            # ① `agent_runs` 收口报 `ResourceClosedError`（被 safe 吞掉）；
-            # ② 库里留下**永远 running 的僵尸行**；③ `plan.agent_trace` 收不到
-            # `events_incomplete`（停止轮又丢字段）。
-            # ``aclose()`` 会把 ``GeneratorExit`` 注入悬挂点、**同步**走完内层 finally ⇒
-            # 收口在场的 session 里完成。实测：不这么做 6/6 复现僵尸行。
-            if source is not None:
-                # 异步生成器的 ``__aiter__()`` 返回自身，所以 ``source`` 就是那个生成器对象；
-                # 用 ``getattr`` 兜一层是为了兼容将来的替身（只实现 ``__anext__`` 的迭代器）。
-                close = getattr(source, "aclose", None)
-                if close is not None:
-                    try:
-                        await close()
-                    except BaseException:  # noqa: BLE001 —— 关闭失败不影响收尾
-                        pass
+            async def cleanup() -> None:
+                # 四种出口都回收在途任务，再关闭厂商流与 Agent 审计。
+                for task in (getter, stop_wait):
+                    if task is not None and not task.done():
+                        task.cancel()
+                        try:
+                            await task
+                        except BaseException:  # noqa: BLE001 —— 取消是预期路径
+                            pass
+                # 条目 4.3 / 回归修复：在 session 关闭前显式 aclose，不能等 GC。
+                # 尚未启动的 getter 被取消时，不会自行关闭内层 Agent 审计生成器。
+                if source is not None:
+                    # 兼容只实现 __anext__ 的迭代器。
+                    close = getattr(source, "aclose", None)
+                    if close is not None:
+                        try:
+                            await close()
+                        except BaseException:  # noqa: BLE001 —— 关闭失败不影响收尾
+                            pass
+            await _wait_closeout(asyncio.create_task(cleanup()))
 
         reasoning_text = "".join(reasoning_parts)
         raw_text = "".join(chunks)
         display_text = "".join(display_chunks)
 
         if stopped or plan.generation_status == "stopped":
-            plan.generation_status = "stopped"
-            plan.finish_reason = "aborted"
             # 停止轮：已生成的部分**留档**（kind=stopped、不挂引用）；
             # **一个增量都没收到**就只落用户消息——「极早期停止零字不落消息」（契约 §2）。
             # Agent 轮的停止同理：轨迹只带**已经下发给前端的那几步**（老基线同款）。
@@ -2257,41 +2418,28 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
             # （`plan.agent_trace` 带 mode/steps/events_incomplete，按本轮归属算的），
             # 只有在 runner 没跑过（`plan.agent_trace is None`）时才回落到这里的 steps。
             # 停止轮**仍然不是 failed**——这个字段说的是「本轮日志完不完整」，不是成败。
-            trace = plan.agent_trace if plan.agent_trace is not None else (
-                {"mode": plan.agent_mode, "steps": list(agent_steps)}
-                if agent_steps
-                else None
-            )
-            try:
-                await persist_stopped_turn(
-                    db,
-                    plan,
-                    display_text,
-                    reasoning=reasoning_text,
-                    images=images,
-                    agent_trace=trace,
-                )
-            except Exception as exc:  # noqa: BLE001 —— 停止轮落库失败也不改收尾语义
-                logger.warning("停止轮落库失败（仍以 stopped 收尾）：%s: %s", exc.__class__.__name__, exc)
+            await asyncio.shield(_stopped_save())
             if guard.stopped():
-                yield sse({"type": "stopped", "chat_id": plan.chat.id})
+                yield sse({"type": "stopped", "chat_id": plan.chat.id, **terminal_state(plan, "stopped")})
             return
 
         hint = hint_for_error(raw_text, plan)
         if hint is not None:
+            terminal_started = True
             # 契约 §2：超时 / 鉴权 / 未配置的 detail 是**固定中文提示**（不把厂商原文抛给用户）；
             # 这一轮不当完整回答落库，但**用户消息要留下**（否则提问会从历史里消失）。
             logger.warning("模型侧异常以 error 收尾：%s", hint)
             # 条目 4.4：超时 / 鉴权 / 未配置三类都属「这次尝试出错了」⇒ ``aborted``
             await log_attempt(db, plan.chat.id, plan, attempt_mod.ATTEMPT_ABORTED)
             try:
-                await persist_user_turn(db, plan, images=images, note=hint)
+                await _persist_user_turn_closeout(images=images, note=hint)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("异常轮的用户消息落库失败：%s: %s", exc.__class__.__name__, exc)
             if guard.error():
-                yield sse({"type": "error", "detail": hint})
+                yield sse({"type": "error", "detail": hint, **terminal_state(plan, "error")})
             return
 
+        terminal_started = True
         try:
             citations = finalize_citations(plan, raw_text)
             await persist_turn(
@@ -2312,7 +2460,7 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
             # 条目 4.4：回答已生成但没落库 ⇒ 这次尝试 ``aborted``（没有持久 assistant 消息）
             await log_attempt(db, plan.chat.id, plan, attempt_mod.ATTEMPT_ABORTED)
             if guard.error():
-                yield sse({"type": "error", "detail": "回答已生成但保存失败，请重试。"})
+                yield sse({"type": "error", "detail": "回答已生成但保存失败，请重试。", **terminal_state(plan, "error")})
             return
 
         # 阶段 4 · 条目 4.5.4：回答成功收口记一条用量（只记成功——异常轮 / 停止轮在上面就
@@ -2372,10 +2520,11 @@ async def chat_stream(payload: ChatRequest, db: AsyncSession = Depends(get_db)):
                     "agent_trace": plan.agent_trace,
                     "answer_source": plan.answer_source,
                     "recovered": chat_recovered,
+                    **terminal_state(plan, "done"),
                 }
             )
 
-    return StreamingResponse(
+    return _ChatStreamingResponse(
         _events(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},

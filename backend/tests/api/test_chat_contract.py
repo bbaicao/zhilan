@@ -2,7 +2,7 @@
 
 覆盖 02 契约里**属于阶段 1 面**的那些条款：
 
-- §7.1 ChatResponse 九字段、§7.2 ChatRequest 八字段；
+- §7.1 ChatResponse 十一字段（v1.0.37）、§7.2 ChatRequest 八字段；
 - §2 SSE：``data: <JSON>\\n\\n``、``text/event-stream``、``Cache-Control: no-cache``、
   ``X-Accel-Buffering: no``、最小事件序 ``meta → token* → done``；
 - §2 行为细节：空 text 且无图 → 400「请输入问题」（**流开始前**）；
@@ -150,8 +150,8 @@ async def test_chat_request_accepts_all_contract_fields(client, use_faux):
 
 
 @pytest.mark.asyncio
-async def test_chat_response_has_nine_contract_fields(client, use_faux):
-    """ChatResponse 九字段齐备（02 §7.1）。"""
+async def test_chat_response_has_eleven_contract_fields(client, use_faux):
+    """ChatResponse 十一字段齐备（02 v1.0.37 §7.1）。"""
     use_faux("今天晴。")
     resp = await client.post("/api/chat", json={"message": "今天天气怎么样"})
     assert resp.status_code == 200, resp.text
@@ -167,6 +167,8 @@ async def test_chat_response_has_nine_contract_fields(client, use_faux):
         "skill_ids",
         "agent_trace",
         "answer_source",
+        "generation_status",
+        "finish_reason",
     }
     assert set(body) == expected, f"字段不匹配：多 {set(body) - expected} / 少 {expected - set(body)}"
     # 非流式 /chat 的 agent_trace 恒为 None（契约明文）
@@ -260,7 +262,7 @@ async def test_scope_with_documents_is_unaffected(client, use_faux):
 
 
 @pytest.mark.asyncio
-async def test_image_too_large_413(client, use_faux):
+async def test_image_too_large_413(client, use_faux, monkeypatch):
     """图片超限 → 413「文件超过限制，请压缩后重试」。
 
     S5 · 回归修复 的**等价强化**（登记项，非放宽）：旧样本 ``"x" * (MAX_UPLOAD_BYTES + 1)``
@@ -268,7 +270,8 @@ async def test_image_too_large_413(client, use_faux):
     断言就会恒绿失效。这里换成**真超限**样本：解码后恰 ``MAX_UPLOAD_BYTES`` + 1 字节的
     base64 data URL。断言面（413 + 文案）与旧样本逐字不变。
     """
-    use_faux("不该被调用")
+    model = use_faux("不该被调用")
+    monkeypatch.setattr(chat_routes, "resolve_vision_model", lambda: model)
     huge = "data:image/png;base64," + base64.b64encode(
         b"\x5a" * (chat_routes.MAX_UPLOAD_BYTES + 1)
     ).decode("ascii")
@@ -339,8 +342,8 @@ async def test_stream_meta_fields(client, use_faux):
 
 
 @pytest.mark.asyncio
-async def test_stream_done_has_nine_business_fields(client, use_faux):
-    """done 事件：type + 九个业务字段（契约 §2「十字段」）。
+async def test_stream_done_has_eleven_business_fields(client, use_faux):
+    """done 事件：type + 十一个业务字段（02 v1.0.37 §2）。
 
     🔴 2026-09-27：`回归修复` 拍板⑨「补」⇒ 新增第 9 个业务字段 `recovered`
     （该会话是否存在恢复痕迹，前端据此免刷新拉取；02 v1.0.12）。原「八业务字段」
@@ -361,6 +364,8 @@ async def test_stream_done_has_nine_business_fields(client, use_faux):
         "agent_trace",
         "answer_source",
         "recovered",
+        "generation_status",
+        "finish_reason",
     }
     assert set(done) == expected, f"多 {set(done)-expected} / 少 {expected-set(done)}"
     assert done["type"] == "done"

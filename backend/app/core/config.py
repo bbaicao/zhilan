@@ -53,13 +53,13 @@ PROVIDER_PRESETS: dict[str, dict[str, str]] = {
     "mimo": {
         "kind": "openai",
         "base_url": "https://api.xiaomimimo.com/v1",
-        "chat_model": "mimo-v2.5",
+        "chat_model": "mimo-v2.6-flash",
         "vision_model": "mimo-v2.5",
     },
     "xiaomi": {
         "kind": "openai",
         "base_url": "https://api.xiaomimimo.com/v1",
-        "chat_model": "mimo-v2.5",
+        "chat_model": "mimo-v2.6-flash",
         "vision_model": "mimo-v2.5",
     },
     "dashscope": {

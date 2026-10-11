@@ -77,17 +77,17 @@ SPECS: tuple[ReasoningSpec, ...] = (
     ReasoningSpec(
         vendor="小米 MiMo",
         providers=("mimo", "xiaomi"),
-        models=("mimo-v2.5",),
+        models=("mimo-v2.5", "mimo-v2.6-flash", "mimo-v2.6-pro"),
         exclude=("-asr", "-tts"),
         param="thinking.type",
         kind="enum",
         values=("enabled", "disabled"),
         labels=("开启思考（厂商默认）", "关闭思考，直接作答"),
         default="enabled",
-        default_label="enabled（mimo-v2.5 / mimo-v2.5-pro 默认开启思考）",
+        default_label="enabled（MiMo v2.5 / v2.6 系列默认开启思考）",
         template={"thinking": {"type": VALUE_PLACEHOLDER}},
         note=(
-            "思考模式下 mimo-v2.5 / mimo-v2.5-pro 的 temperature、top_p 由模型强制取默认值"
+            "思考模式下 MiMo v2.5 / v2.6 系列的 temperature、top_p 由模型强制取默认值"
             "（1.0 / 0.95）；思考内容在响应的 reasoning_content 字段里，不计入正文。"
             "若要用 low / medium / high 分档，那是 MiMo Responses API 的 reasoning.effort，"
             "与这里的 Chat Completions 不是同一个参数。"

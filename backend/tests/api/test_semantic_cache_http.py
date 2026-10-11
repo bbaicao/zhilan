@@ -406,9 +406,11 @@ async def test_a6_done_frame_key_set_is_identical_both_states(client, db, cache_
     done_on = [item for item in second if item["type"] == "done"][-1]
     assert set(done_on) == set(done_off), f"多 {set(done_on) - set(done_off)} / 少 {set(done_off) - set(done_on)}"
     # 🔴 2026-09-27：`回归修复` 拍板⑨「补」⇒ done 帧新增第 10 键 `recovered`（02 v1.0.12）。
+    # S3 user-approved v1.0.37 adds the same two terminal fields to both cache states.
     assert set(done_on) == {
         "type", "chat_id", "refs", "kind", "reasoning", "thinking",
         "skill_ids", "agent_trace", "answer_source", "recovered",
+        "generation_status", "finish_reason",
     }
     # meta 形状也相同
     assert set(first[0]) == set(second[0])
@@ -748,9 +750,9 @@ def test_a3_frozen_prompt_text_is_untouched():
     """**A14 的旁证**：本条目不该动 ``answer.py`` 的三段冻结文案（逐字比对）。"""
     assert answer_mod.SYSTEM_PROMPT.startswith("你是知澜")
     assert "资料如下" in answer_mod.SYSTEM_PROMPT or "[1]" in answer_mod.SYSTEM_PROMPT
-    # 记忆段是 5.1 加的；本条目一个字都没改（关态下逐字等于 5.1 之前的形状）
-    assert answer_mod.system_prompt(True, memory_text="") == answer_mod.SYSTEM_PROMPT
-    assert answer_mod.system_prompt(False, memory_text="") == answer_mod.NO_MATERIAL_SYSTEM_PROMPT
+    # S5-R1共用事实约束不依赖记忆开关，空态仍不拼记忆段。
+    assert answer_mod.system_prompt(True, memory_text="") == answer_mod.SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
+    assert answer_mod.system_prompt(False, memory_text="") == answer_mod.NO_MATERIAL_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
     # 有记忆段时 = 冻结文案 + 附加段（5.1 的口径，本条目未改）
     assert answer_mod.system_prompt(True, memory_text="【记忆】x").startswith(
         answer_mod.SYSTEM_PROMPT

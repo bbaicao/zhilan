@@ -172,6 +172,7 @@ def _iter_document_splits(text: str, size: int, overlap: int):
     starts: list[int] = []
     contexts: list[str] = []
     tables: dict[int, str] = {}
+    indentations: dict[int, str] = {}
     fence = ""
     marker_text = ""
     table_start: int | None = None
@@ -181,6 +182,9 @@ def _iter_document_splits(text: str, size: int, overlap: int):
         position += len(line) + 1
         marker = _FENCE.match(line)
         contexts.append(marker_text)
+        if not contexts[-1] and line.startswith(("    ", "\t")):
+            # ponytail: 展示缩进只缓存半窗；原正文不裁，避免超长前缀耗尽窗口并反复放大。
+            indentations[index] = line[:min(re.match(r"[ \t]+", line).end(), size // 2)]
         if fence:
             if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence) and not marker[2].strip():
                 fence, marker_text = "", ""
@@ -198,11 +202,12 @@ def _iter_document_splits(text: str, size: int, overlap: int):
             table_start = None
     total = len(text)
     start = 0
+    previous_end = 0
     while start < total:
         first = bisect_right(starts, start) - 1
         prefix = contexts[first] + "\n" if contexts[first] else ""
-        if not prefix and start > starts[first] and lines[first].startswith(("    ", "\t")):
-            prefix = re.match(r"[ \t]+", lines[first])[0]
+        if not prefix and start > starts[first]:
+            prefix = indentations.get(first, "")
         if first in tables:
             prefix += tables[first] + "\n"
         active_marker = _FENCE.match(contexts[first] or lines[first])
@@ -211,9 +216,9 @@ def _iter_document_splits(text: str, size: int, overlap: int):
         end = min(start + allowance, total)
         if end < total:
             cut = text.rfind("\n", start, end)
-            if cut > start:
+            if cut > start and cut + 1 > previous_end:
                 end = cut + 1
-            elif "|" in lines[first] and first in protected and start == starts[first]:
+            elif start == starts[first] and first in protected and "|" in lines[first]:
                 # ponytail: 一条结构行最多沿用代码窗口的 4000 字上限；更长行回退字符窗。
                 end = min(starts[first] + len(lines[first]) + 1, start + max(size, CODE_WINDOW_CHARS), total)
         last = bisect_right(starts, max(start, end - 1)) - 1
@@ -227,9 +232,10 @@ def _iter_document_splits(text: str, size: int, overlap: int):
                 suffix = "\n" + closing[1]
         if piece.strip():
             yield prefix + piece + suffix, start, end
+        previous_end = end
         if end >= total:
             break
-        next_start = max(start + 1, end - overlap)
+        next_start = end - overlap if end - overlap > start else end
         if first in protected or last in protected:
             candidate = bisect_right(starts, next_start) - 1
             next_start = starts[candidate] if starts[candidate] > start else end

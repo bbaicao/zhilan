@@ -108,7 +108,7 @@ async def test_stream_image_turn_sends_image_part_and_vision_prompt(client, db, 
 
     assert vision_recorder.calls, "带图轮必须走视觉装配缝"
     assert chat_recorder.calls == [], "带图轮不得改调对话模型"
-    assert vision_recorder.last["system_prompt"] == answer_mod.VISION_UNNUMBERED_SYSTEM_PROMPT
+    assert vision_recorder.last["system_prompt"] == answer_mod.VISION_UNNUMBERED_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
     assert vision_recorder.part_types == ["text", "image"]
     image_part = vision_recorder.last_user_parts()[1]
     assert (image_part.media_type, image_part.source) == ("image/png", "AAAA")
@@ -156,7 +156,7 @@ async def test_sync_image_turn_sends_image_part_and_vision_prompt(client, db, mo
     assert resp.json()["message"] == "图里是一只猫。"
     assert vision_recorder.calls, "同步带图轮也必须走视觉装配缝"
     assert chat_recorder.calls == []
-    assert vision_recorder.last["system_prompt"] == answer_mod.VISION_UNNUMBERED_SYSTEM_PROMPT
+    assert vision_recorder.last["system_prompt"] == answer_mod.VISION_UNNUMBERED_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
     assert vision_recorder.part_types == ["text", "image"]
 
 

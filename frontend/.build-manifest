@@ -1,8 +1,8 @@
 {
-  "src_tree_hash": "ce7204e13954606ba2aad1a14ee784c336711b3ec37bfcfea0dfa42e9c48a530",
+  "src_tree_hash": "9b519255210a728ee8fa25ceeee69cb93bd60d34840223ef0f6f132cb9b79835",
   "src_file_count": 43,
-  "dist_tree_hash": "558144803f889f81252ac9a9f1f6a843043697fd1ada64febf0e8bcdde9408b2",
+  "dist_tree_hash": "bdce40cc9e46d7077fc03e0a4bf04e2a41ac24d7771071c528043a5e3a4b6498",
   "dist_file_count": 7,
-  "built_at": "2026-10-08T23:57:53",
+  "built_at": "2026-10-11T02:26:35",
   "note": "由 backend/scripts/check_frontend_dist_freshness.py --write 生成；改 frontend/src 后须重跑 npm run build 并重生成（src/dist 两哈希都记）"
 }

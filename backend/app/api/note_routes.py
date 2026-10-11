@@ -39,12 +39,13 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.kb_identity import kb_canonical_path, kb_path_key
+from app.api.response_time import response_time
 from app.db.session import get_db
 from app.models import Document, KnowledgeBase, Note
 from app.pipeline import knowledge_graph, wikilink
@@ -97,6 +98,10 @@ class NoteOut(BaseModel):
     source_document_id: int | None = None
     tags: list[str] | None = None
     generation_meta: dict | None = None
+
+    @field_serializer("created_at", "updated_at")
+    def serialize_time(self, value: datetime) -> datetime:
+        return response_time(value)
 
 
 class WikiLinkHit(BaseModel):

@@ -33,6 +33,8 @@ export type Health = {
   status: string;
   database: string;
   redis: string;
+  database_backend?: "sqlite" | "mysql";
+  redis_backend?: "in_process";
   llm_configured: boolean;
   llm_provider: string | null;
   llm_model: string | null;
@@ -192,7 +194,11 @@ export function hasFilters(filters?: ChatFilters | null): boolean {
 }
 
 /** 深度思考（条目 19）：这次回答的思考是怎么来的（厂商给的字段、是否自动加深、为什么）。 */
+export type GenerationStatus = "completed" | "incomplete" | "stopped" | "failed";
+
 export type ThinkingMeta = {
+  generation_status?: GenerationStatus;
+  finish_reason?: string | null;
   /** 厂商的思考参数名，如 thinking.type */
   param?: string;
   /** 本次实际发的档位 */
@@ -248,6 +254,8 @@ export type ChatMessage = {
   content: string;
   refs?: RefItem[] | Record<string, unknown> | null;
   kind?: string | null;
+  generation_status?: GenerationStatus;
+  finish_reason?: string | null;
   /** 该次提问用的过滤范围（回归检查）：历史消息据此还原当时的检索范围。 */
   filters?: ChatFilters | null;
   /** 厂商给的思考内容原文（条目 19）；厂商不给就是空/缺省，界面不编 */
@@ -322,6 +330,8 @@ export type ChatResponse = {
   message: string;
   refs: RefItem[];
   kind?: string;
+  generation_status?: GenerationStatus;
+  finish_reason?: string | null;
   /** 思考内容原文与元数据（条目 19） */
   reasoning?: string;
   thinking?: ThinkingMeta | null;
@@ -766,6 +776,8 @@ export type StreamHandlers = {
   onDone?(data: {
     chat_id: number;
     refs: RefItem[];
+    generation_status?: GenerationStatus;
+    finish_reason?: string | null;
     /** 完整思考文本（流式增量已给过一遍，这里是归一后的全文） */
     reasoning?: string;
     thinking?: ThinkingMeta | null;
@@ -780,7 +792,7 @@ export type StreamHandlers = {
   recovered?: boolean;
   }): void;
   /** 条目 42：用户停止生成。已生成的部分已在服务端落库（kind="stopped"），不再有 done */
-  onStopped?(data: { chat_id: number }): void;
+  onStopped?(data: { chat_id: number; generation_status?: GenerationStatus; finish_reason?: string | null }): void;
 };
 
 /** 条目 42：每次提问的唯一标识，停止时 /api/chat/stop 靠它找到对应的流。 */
@@ -850,6 +862,8 @@ export async function streamChat(
           chat_id?: number;
           text?: string;
           detail?: string;
+          generation_status?: GenerationStatus;
+          finish_reason?: string | null;
           refs?: RefItem[];
           reasoning?: string;
           thinking?: ThinkingMeta | null;
@@ -870,7 +884,10 @@ export async function streamChat(
           continue;
         }
         if (ev.type === "error") {
-          throw new ApiError(ev.detail || "发送失败");
+          throw new ApiError(ev.detail || "发送失败", {
+            generation_status: ev.generation_status ?? "failed",
+            finish_reason: ev.finish_reason ?? null,
+          });
         }
         if (ev.type === "meta" && typeof ev.chat_id === "number") {
           handlers.onMeta?.(ev.chat_id);
@@ -888,6 +905,8 @@ export async function streamChat(
           handlers.onDone?.({
             chat_id: ev.chat_id || 0,
             refs: Array.isArray(ev.refs) ? ev.refs : [],
+            generation_status: ev.generation_status,
+            finish_reason: ev.finish_reason,
             reasoning: ev.reasoning || "",
             thinking: ev.thinking || null,
             skill_ids: Array.isArray(ev.skill_ids) ? ev.skill_ids : [],
@@ -901,7 +920,11 @@ export async function streamChat(
           return;
         }
         if (ev.type === "stopped") {
-          handlers.onStopped?.({ chat_id: ev.chat_id || 0 });
+          handlers.onStopped?.({
+            chat_id: ev.chat_id || 0,
+            generation_status: ev.generation_status ?? "stopped",
+            finish_reason: ev.finish_reason,
+          });
           return;
         }
       }
@@ -1000,18 +1023,18 @@ export type ProviderPreset = {
   vision_model?: string;
 };
 
-/** 数据服务现状：向量库（数据库 / 缓存）存在哪、里面有多少东西。 */
+/** 向量库位置只读信息；目录修改通过本机配置和重启生效。 */
 export type DataState = {
   /** .env 里配的值（可能是相对路径） */
   chroma_dir: string;
-  /** 实际生效的绝对路径 */
+  /** 实际生效的本地绝对路径，或远程 Qdrant 地址 */
   chroma_path: string;
   exists: boolean;
   files: number;
   size_bytes: number;
-  /** -1 = 读不到（目录还没建 / 集合不存在），0 = 空集合 */
+  /** -1 = 未统计或无法读取，0 = 已统计的空集合 */
   vectors: number;
-  /** 只在保存后的那次响应里带有内容（例如「已复制 N 条向量」） */
+  /** 后端提供的只读说明 */
   notice: string;
 };
 

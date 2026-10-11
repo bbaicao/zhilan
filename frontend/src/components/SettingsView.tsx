@@ -72,7 +72,7 @@ function RoleRow({
   );
 }
 
-/** 数据服务入口：MySQL / Redis 状态 + 向量库（数据库 / 缓存）现在存在哪，点进去改存放位置。 */
+/** 数据服务入口：实际数据库 / 缓存状态与只读向量库位置。 */
 function DataRow({
   health,
   settings,
@@ -86,12 +86,14 @@ function DataRow({
 }) {
   const dbOk = health?.database === "ok";
   const redisOk = health?.redis === "ok";
+  const dbLabel = health?.database_backend === "sqlite" ? "SQLite" : health?.database_backend === "mysql" ? "MySQL" : "数据库（类型未知）";
+  const redisLabel = health?.redis_backend === "in_process" ? "进程内缓存" : "缓存（类型未知）";
   const data = settings?.data;
-  const vectors = data ? (data.vectors < 0 ? "还没有向量集合" : `${data.vectors} 条向量`) : "";
+  const vectors = data ? (data.vectors < 0 ? "向量数量未统计" : `${data.vectors} 条向量`) : "";
 
   let desc = "后端未连接";
   if (health) {
-    const parts = [`MySQL ${health.database || "未知"} · Redis ${health.redis || "未知"}`];
+    const parts = [`${dbLabel} ${dbOk ? "正常" : health.database === "error" ? "异常" : "状态未知"} · ${redisLabel} ${redisOk ? "正常" : health.redis === "error" ? "异常" : "状态未知"}`];
     if (data) parts.push(`向量库存放于 ${data.chroma_path}（${vectors}）`);
     desc = parts.join(" ｜ ");
   }
@@ -101,7 +103,7 @@ function DataRow({
       type="button"
       onClick={onEditData}
       title={desc}
-      aria-label="配置数据库 / 缓存的存放位置"
+      aria-label="查看数据服务状态和向量库位置"
       className="flex w-full items-center gap-3.5 rounded-2xl bg-fog/[0.03] px-4 py-3.5 text-left transition-colors hover:bg-fog/[0.05]"
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-fog/[0.05]">
@@ -112,14 +114,14 @@ function DataRow({
         <div className="mt-0.5 truncate text-[12.5px] text-mute">{desc}</div>
       </div>
       {health ? (
-        <span className="flex shrink-0 items-center gap-2 text-[11px] text-faint">
+        <span className="hidden shrink-0 items-center gap-2 text-[11px] text-faint sm:flex">
           <span className="flex items-center gap-1">
             <span className={cx("h-1.5 w-1.5 rounded-full", dbOk ? "bg-ok" : "bg-rose")} />
-            MySQL
+            {dbLabel}
           </span>
           <span className="flex items-center gap-1">
             <span className={cx("h-1.5 w-1.5 rounded-full", redisOk ? "bg-ok" : "bg-rose")} />
-            Redis
+            {redisLabel}
           </span>
         </span>
       ) : null}
@@ -538,7 +540,7 @@ export default function SettingsView({
 
       <div className="mb-2 mt-6 flex items-center justify-between px-1 text-[11.5px] text-faint">
         <span>数据服务</span>
-        <span>点进去可改存放位置</span>
+        <span>查看状态与实际位置</span>
       </div>
       <div className="space-y-2">
         <DataRow health={health} settings={settings} down={down} onEditData={onEditData} />

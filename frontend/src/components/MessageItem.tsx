@@ -82,6 +82,25 @@ function MessageItem({
     ? { items: [], mode: "none" as const }
     : resolveCitations(message.content, message.refs);
   const kind = message.kind || "normal";
+  const generationStatus = isUser ? undefined : (
+    message.generation_status ?? message.thinking?.generation_status ??
+    (kind === "stopped" ? "stopped" : undefined)
+  );
+  const finishReason = message.finish_reason ?? message.thinking?.finish_reason;
+  const generationLabel = generationStatus === "completed" ? "已完成"
+    : generationStatus === "incomplete" ? "回答已截断"
+    : generationStatus === "stopped" ? "已停止"
+    : generationStatus === "failed" ? "生成失败" : "";
+  const reasonLabel = finishReason ? ({
+    stop: "正常结束",
+    length: "达到输出长度上限",
+    aborted: "用户停止",
+    stopped: "用户停止",
+    user_stop: "用户停止",
+    local_abort: "本地停止，部分内容未保存",
+    error: "生成出错",
+    content_filter: "服务方内容限制",
+  } as Record<string, string>)[finishReason] ?? finishReason : "";
   // 条目 53：这条用户消息随消息发出的图（助理消息与历史存量消息恒为空）
   const images = message.images ?? [];
   const rawText = message.content ?? "";
@@ -243,17 +262,20 @@ function MessageItem({
             {/* 条目 3.6 / 条目 42 / 条目 23：正文右下角**同一条信息行**——
                 来源标签固定在气泡角落（右端），左端留给「已停止」角标，右端还有翻译入口。
                 标签不占引用卡片的位置：引用区是下一块（`CitationList`），库内回答两者同时出现。 */}
-            {kind === "stopped" || sourceTag || message.recovered || (onTranslate && message.content.trim()) ? (
-              <div className="mt-1 flex select-none items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
+            {generationLabel || sourceTag || message.recovered || (onTranslate && message.content.trim()) ? (
+              <div className="mt-1 flex select-none flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {/* 条目 42：被用户停止的回答在截断处标明「已停止」，不装作完整答案 */}
-                  {kind === "stopped" ? (
+                  {generationLabel ? (
                     <div
-                      className="flex items-center gap-1 text-[12px] text-faint"
-                      title="你停止了这次生成，以上是停止前已生成的部分"
+                      data-generation-status={generationStatus}
+                      className={cx("flex min-w-0 items-center gap-1 break-words text-[12px]",
+                        generationStatus === "incomplete" || generationStatus === "failed" ? "text-warn" : "text-faint")}
                     >
-                      <Square size={10} strokeWidth={2.5} fill="currentColor" />
-                      已停止
+                      {generationStatus === "stopped" ? <Square size={10} className="shrink-0" strokeWidth={2.5} fill="currentColor" />
+                        : generationStatus === "completed" ? <Check size={12} className="shrink-0" strokeWidth={2} />
+                        : <AlertTriangle size={12} className="shrink-0" strokeWidth={2} />}
+                      <span className="min-w-0 break-words">{generationLabel}{reasonLabel ? ` · ${reasonLabel}` : ""}</span>
                     </div>
                   ) : null}
                   {/* 阶段 4 条目 4.3：这一轮发生过崩溃恢复（工具已经开始但没留下结果）。

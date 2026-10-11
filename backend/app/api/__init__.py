@@ -75,7 +75,7 @@ def _safe_config(attr: str):
 
 @router.get("/health")
 async def health():
-    """健康检查：**真实探测** MySQL / Redis，并回报模型配置状态。
+    """健康检查：探测所选数据库和进程内缓存，并回报实现身份及模型配置状态。
 
     返回体字段是**契约**（前端 ``api.ts::Health`` 逐字依赖，外壳冻结不可改）：
 
@@ -92,7 +92,7 @@ async def health():
             await db.execute(text("SELECT 1"))
         database = "ok"
     except Exception as exc:  # noqa: BLE001 —— 探活失败就是 error，不抛
-        logger.warning("health: MySQL 探测失败：%s", exc)
+        logger.warning("health: 数据库探测失败：%s", exc)
 
     redis_status = "error"
     try:
@@ -146,6 +146,8 @@ async def health():
         "status": "ok" if database == "ok" and redis_status == "ok" else "error",
         "database": database,
         "redis": redis_status,
+        "database_backend": "sqlite" if settings.is_sqlite else "mysql",
+        "redis_backend": "in_process",
         "llm_configured": llm_configured,
         "llm_provider": llm_provider,
         "llm_model": llm_model,

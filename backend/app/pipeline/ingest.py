@@ -109,9 +109,15 @@ def prepare_document(filename: str, data: bytes, fallback_category: str = "") ->
        切块为空 → RagError（「文件内容为空，无法入库。」）。
     """
     from app.pipeline.builds import processing_fingerprint
+    from app.pipeline.parsing import CODE_SUFFIXES, detect_encoding
 
     processing = processing_fingerprint()
+    source_sha256 = hashlib.sha256(data).hexdigest()
     text, pages = parse_document_pages(filename, data)
+    source_encoding = detect_encoding(data) if Path(filename).suffix.lower() in CODE_SUFFIXES else None
+    # ponytail: the parser has materialized text; release the request bytes before
+    # cleaning/chunking so the desktop process does not retain both representations.
+    del data
 
     # frontmatter **只对 markdown 解析**（照老仓库 `_prepare` L119-124）：其它格式的
     # 正文里以 `---` 开头的内容是普通文本，按 YAML 剥掉就是真丢内容。md 时 YAML 在
@@ -124,9 +130,7 @@ def prepare_document(filename: str, data: bytes, fallback_category: str = "") ->
 
     # 切块函数由条目 2.2 并行子代理实现；此处按需 import（见模块 docstring）。
     from app.pipeline.chunking import chunk_code, chunk_document
-    from app.pipeline.parsing import CODE_SUFFIXES, detect_encoding
 
-    source_encoding: str | None = None
     if Path(filename).suffix.lower() in CODE_SUFFIXES:
         # 工具升级-3 · 回归检查 · D-回归检查：代码 / 配置 / 前端资源**不走清洗、不走 chunk_document**。
         # 理由（现读实测）：clean() 开启时会去掉行首缩进（cleaning.py 的 S2 空白归一），
@@ -135,8 +139,6 @@ def prepare_document(filename: str, data: bytes, fallback_category: str = "") ->
         # clean(text, enable=False) 是现成的「原文照入」档（text == raw，不跑 S2–S6）。
         clean_result = clean(fm.body, enable=False)
         pieces = chunk_code(clean_result.text)
-        # 编码名只探测、不改内容；落库在 _finish_ingest（随 0006 一并，见 D-回归检查 归属）。
-        source_encoding = detect_encoding(data)
     else:
         clean_result = clean(fm.body, pages=pages)
         pieces = chunk_document(
@@ -179,7 +181,7 @@ def prepare_document(filename: str, data: bytes, fallback_category: str = "") ->
         created_at=created_at,
         meta_warnings=list(fm.warnings),
         source_encoding=source_encoding,
-        source_sha256=hashlib.sha256(data).hexdigest(),
+        source_sha256=source_sha256,
         processing_fingerprint=processing,
     )
 
@@ -316,8 +318,10 @@ async def _build_document(
             build.error = error
             await session.commit()
         await builds.publish_build(session, build_id, embedding=get_embedding_client())
-        build = await session.get(IndexBuild, build_id, populate_existing=True)
-        return bool(build.vectorized), build.error, True
+        vectorized, error = (await session.execute(
+            select(IndexBuild.vectorized, IndexBuild.error).where(IndexBuild.id == build_id)
+        )).one()
+        return bool(vectorized), error, True
     except asyncio.CancelledError:
         if build_id:
             await builds.fail_build(
@@ -331,12 +335,15 @@ async def _build_document(
         if build_id:
             await builds.fail_build(session, build_id, error, store=store)
             # 提交已落库但返回失败，按实际启用版本统计，不能误记失败或清新点。
-            build = await session.get(IndexBuild, build_id, populate_existing=True)
+            document_id, vectorized, vector_error = (await session.execute(
+                select(IndexBuild.document_id, IndexBuild.vectorized, IndexBuild.error)
+                .where(IndexBuild.id == build_id)
+            )).one()
             active = await session.scalar(
-                select(Document.active_build_id).where(Document.id == build.document_id)
+                select(Document.active_build_id).where(Document.id == document_id)
             )
             if active == build_id:
-                return bool(build.vectorized), build.error, True
+                return bool(vectorized), vector_error, True
         else:
             await session.rollback()
         return False, error, False
@@ -372,6 +379,17 @@ async def _find_by_hash(
     session: AsyncSession, content_hash: str, *, prepared: Prepared | None = None
 ) -> Document | None:
     """查正文身份及旧版原文候选（含回收站）；不自动回填旧摘要。"""
+    exact = (await session.execute(
+        select(Document).options(load_only(
+            Document.id, Document.filename, Document.index_status, Document.deleted_at,
+            Document.content_hash, Document.clean_report, Document.file_path,
+        )).where(Document.content_hash == content_hash).order_by(Document.id.asc()).limit(1)
+    )).scalar_one_or_none()
+    if exact is not None:
+        if not _current_identity(exact):
+            with session.no_autoflush:
+                await session.refresh(exact, attribute_names=["raw_content"])
+        return exact
     predicate = Document.content_hash == content_hash
     if prepared is not None:
         # ponytail: 旧版原文回查需一次全文等值扫描；存量经明确重建后改走摘要索引。
@@ -702,11 +720,13 @@ async def _finish_ingest(
             failed.clean_report = report
             await mark_failed(session, failed, "索引构建已取消。" if isinstance(exc, asyncio.CancelledError) else _zh(exc))
         raise
-    doc = await session.get(Document, doc_id, populate_existing=True)
+    filename, chunk_count = (await session.execute(
+        select(Document.filename, Document.chunk_count).where(Document.id == doc_id)
+    )).one()
     return IngestResult(
-        document_id=doc_id, filename=doc.filename, chunk_count=doc.chunk_count,
+        document_id=doc_id, filename=filename, chunk_count=chunk_count,
         vectorized=vectorized,
-        message=f"已写入 {doc.chunk_count} 个分块。" + (f"{error}" if error else ""),
+        message=f"已写入 {chunk_count} 个分块。" + (f"{error}" if error else ""),
     )
 
 async def rebuild_document_links(session: AsyncSession, doc: Document, text: str) -> bool:
@@ -779,6 +799,7 @@ async def ingest_document(
                 fallback_category=fallback_category,
                 created=False,
                 overwrite=overwrite,
+                source_data=data if stored_path is not None else None,
             )
 
     # 3. 建 pending 行
@@ -804,6 +825,7 @@ async def ingest_document(
         fallback_category=fallback_category,
         created=True,
         overwrite=overwrite,
+        source_data=data if stored_path is not None else None,
     )
 
 
@@ -818,6 +840,7 @@ async def _ingest_into(
     fallback_category: str,
     created: bool,
     overwrite: bool = False,
+    source_data: bytes | None = None,
 ) -> IngestResult:
     """在给定行上跑完入库：置 pending → 解析切块 → 内容级重复判定 → 落库。
 
@@ -836,6 +859,8 @@ async def _ingest_into(
         prepared = await asyncio.to_thread(
             prepare_document, filename, data, fallback_category=fallback_category
         )
+        if source_data is None:
+            data = b""
     except Exception as exc:
         await mark_failed(session, doc, _zh(exc))
         raise
@@ -888,7 +913,7 @@ async def _ingest_into(
             )
             existing = await session.get(Document, existing_id, populate_existing=True)
             return await _finish_ingest(
-                session, existing, prepared, stored, kb_id=kb_id, source_data=data
+                session, existing, prepared, stored, kb_id=kb_id, source_data=source_data
             )
         if overwrite:
             await _close_out_duplicate_row(
@@ -896,7 +921,7 @@ async def _ingest_into(
             )
             existing = await session.get(Document, existing_id, populate_existing=True)
             return await _finish_ingest(
-                session, existing, prepared, stored, kb_id=kb_id, source_data=data
+                session, existing, prepared, stored, kb_id=kb_id, source_data=source_data
             )
         else:
             reason = f"知识库里已有同内容文档（id={existing_id}，{existing_name}）。"
@@ -916,7 +941,7 @@ async def _ingest_into(
 
     # 落库。失败由 _finish_ingest 负责置 failed 并抛出。
     return await _finish_ingest(
-        session, doc, prepared, stored, kb_id=kb_id, source_data=data
+        session, doc, prepared, stored, kb_id=kb_id, source_data=source_data
     )
 
 

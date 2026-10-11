@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -174,6 +174,8 @@ class ChatResponse(BaseModel):
     # 非流式 /chat 恒为 None（契约明文：流式接口才落 agent_trace）
     agent_trace: dict | None = None
     answer_source: str | None = None
+    generation_status: Literal["completed", "incomplete", "stopped", "failed"] = "completed"
+    finish_reason: str | None = None
 
 
 class ChatStopIn(BaseModel):

@@ -1182,6 +1182,8 @@ export default function App() {
                 // 流式增量可能被截断或与归一后的全文略有差异，以 done 里的为准
                 reasoning: result.reasoning || item.reasoning || "",
                 thinking: result.thinking ?? item.thinking ?? null,
+                generation_status: result.generation_status,
+                finish_reason: result.finish_reason,
                 skill_ids: result.skill_ids?.length ? result.skill_ids : item.skill_ids ?? null,
                 // 条目 18：done 为 null（非 Agent 回答）时保留流式攒下的步骤，避免折叠块闪没
                 agent_trace: result.agent_trace ?? item.agent_trace ?? null,
@@ -1234,17 +1236,27 @@ export default function App() {
             // 条目 44：不是正在看的会话 → 铃铛推一条「已完成」；正看着的不打扰
             //（onStopped 不发通知：手动停止只发生在当前视图，不会命中这里）
             if (!rec.invalidated && rec.chatId !== null && !watchingOnScreen(rec)) {
-              pushNotice(rec.chatId, "done", "已完成");
+              const status = result.generation_status ?? result.thinking?.generation_status;
+              pushNotice(
+                rec.chatId,
+                status === "failed" ? "error" : "done",
+                status === "incomplete" ? "回答已截断" : status === "failed" ? "生成失败" : status === "stopped" ? "已停止" : "已完成",
+              );
             }
           },
-          onStopped() {
+          onStopped(result) {
             if (rec.invalidated) return;
             // 条目 42：用户停止——给这条回答打上「已停止」标记（已生成的部分原样保留，
             // 服务端已把部分内容以 kind="stopped" 落库，刷新后仍能看到）；
             // 一个增量都没收到时没有这条气泡，用横幅告知即可。
             onView(() => {
               setMessages((prev) =>
-                prev.map((item) => (item.id === rec.botId ? { ...item, kind: "stopped" } : item)),
+                prev.map((item) => (item.id === rec.botId ? {
+                  ...item,
+                  kind: "stopped",
+                  generation_status: result.generation_status ?? "stopped",
+                  finish_reason: result.finish_reason ?? null,
+                } : item)),
               );
               flash("已停止生成", 2600);
             });
@@ -1262,22 +1274,37 @@ export default function App() {
         // 气泡与已生成的半成品原样留在界面；本地保留的部分刷新即失（与后端语义一致的真实状态）。
         // 不回填输入框，队列也保留不自动续发。
         if (stillThere) {
+          setMessages((prev) => prev.map((item) => item.id === rec.botId ? {
+            ...item, kind: "stopped", generation_status: "stopped", finish_reason: "local_abort",
+          } : item));
           flash("已停止（已生成的部分未能保存）");
         }
       } else if (stillThere) {
         setChatInput(text);
+        // 失败不写入成功回答；本地提示保留半成品并明确标为失败，刷新以服务端历史为准。
+        const failedMessage: ChatMessage = {
+          ...(partialFromStream(rec) ?? {
+            id: rec.botId, role: "assistant", content: "", created_at: new Date().toISOString(),
+          }),
+          generation_status: "failed",
+          finish_reason: err instanceof ApiError && typeof err.payload?.finish_reason === "string"
+            ? err.payload.finish_reason : "error",
+        };
+        const withFailure = (items: ChatMessage[]) => [
+          ...items.filter((item) => item.id !== rec.botId), failedMessage,
+        ];
         // 回归修复：失败轮带过图就把快照装回附件区（图片数据此前随清空直接丢失）。
         // 只在快照非空时回填：纯文字轮失败不去动附件区，避免抹掉生成期间用户新放的图。
         if (sentImages && sentImages.length) setImages(sentImages);
         if (rec.chatId) {
           try {
             const detail = await getChat(rec.chatId);
-            if (streamOnView(activeViewRef.current, rec)) setMessages(detail.messages);
+            if (streamOnView(activeViewRef.current, rec)) setMessages(withFailure(detail.messages));
           } catch {
-            if (streamOnView(activeViewRef.current, rec)) setMessages((prev) => prev.filter((item) => item.id > 0));
+            if (streamOnView(activeViewRef.current, rec)) setMessages((prev) => withFailure(prev.filter((item) => item.id > 0)));
           }
         } else {
-          setMessages((prev) => prev.filter((item) => item.id > 0));
+          setMessages((prev) => withFailure(prev.filter((item) => item.id > 0)));
         }
         if (!rec.invalidated) flash(err instanceof ApiError ? err.message : "发送失败");
       } else {

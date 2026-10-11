@@ -113,7 +113,8 @@ async def test_sync_with_materials_feeds_material_block(client, db, monkeypatch)
     assert MATERIAL_CHUNK in prompt_text
     # 有编号资料同时带 U4 的逐事实引用约束；来源身份仍与原文一致。
     assert recorder.last["system_prompt"] == (
-        answer_mod.SYSTEM_PROMPT + "\n\n" + answer_mod.CITED_ANSWER_CONSTRAINTS
+        answer_mod.SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
+        + "\n\n" + answer_mod.CITED_ANSWER_CONSTRAINTS
     )
     assert len(body["refs"]) == 1
     assert body["refs"][0]["source_id"] == document.id
@@ -138,7 +139,7 @@ async def test_sync_without_materials_keeps_no_material_wording(client, db, monk
     prompt_text = recorder.last_user_text
     assert "资料如下" not in prompt_text
     assert "知识库" not in prompt_text  # 无资料时不许出现「资料」措辞（I7 的反面）
-    assert recorder.last["system_prompt"] == answer_mod.NO_MATERIAL_SYSTEM_PROMPT
+    assert recorder.last["system_prompt"] == answer_mod.NO_MATERIAL_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
 
 
 # --- ④ 流式 × 有资料 --------------------------------------------------------
@@ -167,7 +168,8 @@ async def test_stream_with_materials_feeds_material_block(client, db, monkeypatc
     assert f"[1]（文档：{MATERIAL_FILENAME}）" in recorder.last_user_text
     assert MATERIAL_CHUNK in recorder.last_user_text
     assert recorder.last["system_prompt"] == (
-        answer_mod.SYSTEM_PROMPT + "\n\n" + answer_mod.CITED_ANSWER_CONSTRAINTS
+        answer_mod.SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
+        + "\n\n" + answer_mod.CITED_ANSWER_CONSTRAINTS
     )
     assert len(done["refs"]) == 1
     assert done["refs"][0]["source_id"] == document.id
@@ -193,7 +195,7 @@ async def test_stream_without_materials_keeps_no_material_wording(client, db, mo
     assert done["answer_source"] == "general"
 
     assert "资料如下" not in recorder.last_user_text
-    assert recorder.last["system_prompt"] == answer_mod.NO_MATERIAL_SYSTEM_PROMPT
+    assert recorder.last["system_prompt"] == answer_mod.NO_MATERIAL_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
 
 
 # --- ① 范围传递 -------------------------------------------------------------

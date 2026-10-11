@@ -50,7 +50,7 @@ async def test_image_turn_with_vision_only_binding_is_accepted(client, db, monke
     assert resp.status_code == 200
     assert resp.json()["message"] == "图里是一只猫。"
     assert vision.calls, "带图轮走视觉装配缝"
-    assert vision.last["system_prompt"] == answer_mod.VISION_UNNUMBERED_SYSTEM_PROMPT
+    assert vision.last["system_prompt"] == answer_mod.VISION_UNNUMBERED_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
 
 
 # --- 腿②：视觉装配不到 ⇒ 400 固定中文提示（两端点同一闸门、零 DB 副作用）-------

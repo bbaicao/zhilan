@@ -37,13 +37,21 @@ DEEPSEEK = "deepseek"
 
 
 def test_a1_mimo_thinking_type_and_excludes():
-    for model in ("mimo-v2.5", "mimo-v2.5-pro"):
+    for model in (
+        "mimo-v2.5", "mimo-v2.5-pro", "mimo-v2.6-flash",
+        "mimo-v2.6-pro", "mimo-v2.6-pro-ultraspeed",
+    ):
         spec = spec_for(MIMO, model)
         assert spec is not None, model
         assert spec.param == "thinking.type"
         assert spec.kind == "enum"
         assert spec.values == ("enabled", "disabled")
         assert spec.default == "enabled"
+        for value in ("enabled", "disabled"):
+            assert request_body_for(MIMO, model, dump_stored(spec.param, value, model)) == {
+                "thinking": {"type": value}
+            }
+        assert request_body_for(MIMO, model, dump_stored(spec.param, "high", model)) is None
     # exclude：-asr / -tts 不登记（否则会给语音型号发它不认识的思考参数）
     assert spec_for(MIMO, "mimo-v2.5-asr") is None
     assert spec_for(MIMO, "mimo-v2.5-tts") is None

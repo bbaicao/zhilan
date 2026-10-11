@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 from typing import Literal
+from app.api.response_time import response_time
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -55,7 +56,7 @@ def _note_item(row) -> dict:
         "id": int(row.id),
         "title": row.title or "",
         "category": row.category or "",
-        "deleted_at": row.deleted_at,
+        "deleted_at": response_time(row.deleted_at, utc=True),
     }
 
 
@@ -65,13 +66,13 @@ def _document_item(row) -> dict:
         "id": int(row.id),
         "title": row.filename or "",
         "category": row.category or "",
-        "deleted_at": row.deleted_at,
+        "deleted_at": response_time(row.deleted_at, utc=True),
     }
 
 
 def _chat_item(row) -> dict:
     # 会话没有分类维度：TrashItem.category 是可选的，这里**不带**这个键（不发空占位）
-    return {"id": int(row.id), "title": row.title or "", "deleted_at": row.deleted_at}
+    return {"id": int(row.id), "title": row.title or "", "deleted_at": response_time(row.deleted_at, utc=True)}
 
 
 @router.get("/trash")

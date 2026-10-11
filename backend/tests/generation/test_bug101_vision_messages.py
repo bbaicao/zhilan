@@ -26,6 +26,18 @@ import pytest
 
 from app.core.config import Settings, settings
 from app.generation import answer as answer_mod
+from tests.generation.test_direct_answer import FROZEN_VISION
+
+MEMORY_SUBJECT_CONSTRAINT = (
+    "下方记忆中关于用户本人的事实，其主体是本轮提问的用户；"
+    "回答这些偏好时用您或用户指代事实主体，"
+    "不要把用户偏好说成知澜自身偏好；"
+    "本轮明确要求代写第一人称时遵守代写要求。"
+)
+MEMORY_PRIORITY_CONSTRAINT = (
+    "记忆仅供补充参考；本轮用户明确要求和当前资料优先。"
+    "不得用记忆覆盖本轮数字、日期、否定、范围或其他硬约束；有冲突时说明并确认。"
+)
 
 # --- 工具 -------------------------------------------------------------------
 
@@ -121,30 +133,54 @@ def test_no_images_keeps_typed_messages_byte_identical():
 # --- 腿②：system_prompt 的视觉态（四态选择的唯一控制点） -----------------------
 
 
+def _assert_vision_prompt_contract(prompt: str, *, memory_text: str = "") -> None:
+    expected = FROZEN_VISION + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
+    if memory_text:
+        expected += (
+            "\n\n" + MEMORY_SUBJECT_CONSTRAINT + "\n" + memory_text
+            + "\n" + MEMORY_PRIORITY_CONSTRAINT
+        )
+    assert prompt == expected
+
+
 def test_system_prompt_selects_vision_prompt():
-    assert (
-        answer_mod.system_prompt(True, has_images=True) == answer_mod.VISION_SYSTEM_PROMPT
-    )
+    _assert_vision_prompt_contract(answer_mod.system_prompt(True, has_images=True))
     # 视觉态压过「无资料」态
-    assert (
-        answer_mod.system_prompt(False, has_images=True) == answer_mod.VISION_SYSTEM_PROMPT
+    _assert_vision_prompt_contract(answer_mod.system_prompt(False, has_images=True))
+    # S6-R2：独立冻结用户主体、代写例外及 U6 当前问题/资料优先约束。
+    _assert_vision_prompt_contract(
+        answer_mod.system_prompt(True, memory_text="用户喜欢简洁。", has_images=True),
+        memory_text="用户喜欢简洁。",
     )
-    # 视觉态下记忆段在之后，U6 的当前问题/资料优先约束也须完整保留。
-    assert answer_mod.system_prompt(True, memory_text="用户喜欢简洁。", has_images=True) == (
-        answer_mod.VISION_SYSTEM_PROMPT + "\n\n用户喜欢简洁。"
-        "\n记忆仅供补充参考；本轮用户明确要求和当前资料优先。"
-        "不得用记忆覆盖本轮数字、日期、否定、范围或其他硬约束；有冲突时说明并确认。"
-    )
+
+
+@pytest.mark.parametrize(
+    "removed",
+    [
+        FROZEN_VISION,
+        MEMORY_SUBJECT_CONSTRAINT,
+        "本轮明确要求代写第一人称时遵守代写要求。",
+    ],
+    ids=["visual-base", "memory-subject", "first-person-exception"],
+)
+def test_vision_prompt_contract_rejects_missing_constraint(removed):
+    prompt = answer_mod.system_prompt(True, memory_text="用户喜欢简洁。", has_images=True)
+    _assert_vision_prompt_contract(prompt, memory_text="用户喜欢简洁。")
+    assert removed in prompt
+    with pytest.raises(AssertionError):
+        _assert_vision_prompt_contract(
+            prompt.replace(removed, "", 1), memory_text="用户喜欢简洁。",
+        )
 
 
 def test_system_prompt_without_images_is_unchanged():
-    """无图轮回归钉：三态派生面零变化（``has_images`` 缺省 False）。"""
-    assert answer_mod.system_prompt(True) == answer_mod.SYSTEM_PROMPT
-    assert answer_mod.system_prompt(False) == answer_mod.NO_MATERIAL_SYSTEM_PROMPT
+    """S5-R1：无图三态基础选择不变，均附加具名事实约束。"""
+    assert answer_mod.system_prompt(True) == answer_mod.SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
+    assert answer_mod.system_prompt(False) == answer_mod.NO_MATERIAL_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
     monkey = pytest.MonkeyPatch()
     try:
         monkey.setattr(settings, "CHAT_DIRECT_ANSWER_ENABLE", False)
-        assert answer_mod.system_prompt(True) == answer_mod.LEGACY_SYSTEM_PROMPT
+        assert answer_mod.system_prompt(True) == answer_mod.LEGACY_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
     finally:
         monkey.undo()
 
@@ -208,7 +244,7 @@ async def test_answer_direct_feeds_images_and_vision_prompt():
     )
     assert result.answer == recorder.reply
     prompt = recorder.calls[-1]
-    assert prompt["system_prompt"] == answer_mod.VISION_UNNUMBERED_SYSTEM_PROMPT
+    assert prompt["system_prompt"] == answer_mod.VISION_UNNUMBERED_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
     parts = prompt["messages"][-1].content
     assert [getattr(block, "type", "") for block in parts] == ["text", "image"]
     assert parts[1].source == "AAAA"
@@ -216,15 +252,15 @@ async def test_answer_direct_feeds_images_and_vision_prompt():
 
 @pytest.mark.asyncio
 async def test_answer_direct_without_images_unchanged():
-    """无图回归钉：不传 images ⇒ 系统提示/消息形态与接线前一致。"""
+    """S5-R1：无图消息形态不变，选中的基础提示附加事实约束。"""
     recorder = _Recorder("纯文本回答。")
     result = await answer_mod.answer_direct("你好", model=recorder, source_type="external")
     assert result.answer == "纯文本回答。"
     prompt = recorder.calls[-1]
     assert prompt["system_prompt"] in (
-        answer_mod.SYSTEM_PROMPT,
-        answer_mod.NO_MATERIAL_SYSTEM_PROMPT,
-        answer_mod.LEGACY_SYSTEM_PROMPT,
+        answer_mod.SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS,
+        answer_mod.NO_MATERIAL_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS,
+        answer_mod.LEGACY_SYSTEM_PROMPT + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS,
     )
     parts = prompt["messages"][-1].content
     assert [getattr(block, "type", "") for block in parts] == ["text"]

@@ -145,15 +145,19 @@ async def lifespan(_app: FastAPI):
         print(f"数据库迁移未完成：{exc}")
     # 已在 head 的库不会重跑 0007；维护工具留下的 pending 仍必须阻断启动。
     ensure_kb_maintenance_complete(settings.database_dsn, expected_vector_target=expected_vector_target)
-    yield
-    await engine.dispose()
-    await close_redis()
-    # 阶段 3 · 条目 3.0（B6）：退出释放向量库客户端——本地 Qdrant 是目录独占锁，
-    # 不释放会让「第二次打开」失败（复用/释放/重开三项验收的落点）。
-    close_vector_store()
+    from app.usage.recorder import start_recovery, stop_recovery
+    start_recovery()
+    try:
+        yield
+    finally:
+        await stop_recovery()
+        await engine.dispose()
+        await close_redis()
+        # Local Qdrant clients hold a directory lock until closed.
+        close_vector_store()
 
 
-app = FastAPI(title="知澜", version="0.1.1", lifespan=lifespan)
+app = FastAPI(title="知澜", version="0.1.4", lifespan=lifespan)
 app.include_router(router, prefix="/api")
 app.include_router(agent_routes_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")

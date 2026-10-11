@@ -47,7 +47,7 @@ from app.core import net_guard
 #: MCP 协议版本（老基线同：2024-11-05）。
 PROTOCOL_VERSION = "2024-11-05"
 DEFAULT_TIMEOUT = 8.0
-CLIENT_INFO = {"name": "zhilan", "version": "0.1.1"}
+CLIENT_INFO = {"name": "zhilan", "version": "0.1.4"}
 
 
 #: 出网守卫的**唯一调用点**（`回归修复`）。

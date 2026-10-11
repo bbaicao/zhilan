@@ -36,7 +36,7 @@
 #define MyAppName "知澜"
 ; ★ 安装器版本的单一来源；发版时需与 frontend/package.json、公开文档和 Git 标签同步。
 ;   AppVersion / 安装包文件名 / 安装器自身版本资源全部由它派生。
-#define MyAppVersion "0.1.1"
+#define MyAppVersion "0.1.4"
 #define MyAppPublisher "bbaicao"
 #define MyAppExeName "zhilan.exe"
 

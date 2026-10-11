@@ -31,9 +31,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+from uuid import uuid4
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core import derived_counters
 from app.db.session import SessionLocal, new_independent_session
@@ -49,6 +55,103 @@ KINDS: tuple[str, ...] = ("chat", "vision", "embed", "rerank")
 
 #: 在途落库任务的强引用（asyncio 只留弱引用，不攥着可能中途被 GC）。
 _pending: set[asyncio.Task] = set()
+_writers: dict[Path, asyncio.Task] = {}
+_recovery_task: asyncio.Task | None = None
+
+
+def _journal_dir(session: AsyncSession) -> Path | None:
+    bind = getattr(session, "bind", None)
+    url = getattr(bind, "url", None)
+    if url is None or url.get_backend_name() != "sqlite" or url.database in (None, "", ":memory:"):
+        return None
+    database = Path(url.database).resolve()
+    return database.with_name(database.name + ".usage-pending")
+
+
+def _save_event(directory: Path, event: dict) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / (event["meta"]["_usage_event_id"] + ".json")
+    temporary = target.with_suffix(".tmp")
+    with temporary.open("x", encoding="utf-8") as stream:
+        json.dump(event, stream, ensure_ascii=True)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, target)
+
+
+async def _recover_directory(directory: Path, factory) -> None:
+    for path in sorted(directory.glob("*.json")):
+        try:
+            event = json.loads(path.read_text(encoding="utf-8"))
+            event_id = event["meta"]["_usage_event_id"]
+            event["created_at"] = datetime.fromisoformat(event["created_at"])
+            async with factory() as session:
+                # Independent write transaction avoids deferred read-to-write lock upgrades.
+                await session.execute(text("BEGIN IMMEDIATE"))
+                # ponytail: replay scans JSON IDs; add an indexed ID column if the ledger grows large.
+                existing = await session.scalar(select(UsageEvent.id).where(
+                    UsageEvent.meta["_usage_event_id"].as_string() == event_id
+                ).limit(1))
+                if existing is None:
+                    session.add(UsageEvent(**event))
+                await session.commit()
+            path.unlink(missing_ok=True)
+        except Exception as exc:
+            logger.warning("用量待恢复事件尚未落库：%s", type(exc).__name__)
+            derived_counters.bump("usage_events")
+            # Keep the original event; one failed writer must not wait once per queued event.
+            return
+
+
+def _schedule_recovery(directory: Path, factory, loop) -> None:
+    running = _writers.get(directory)
+    if running is not None and not running.done():
+        return
+    task = loop.create_task(_recover_directory(directory, factory))
+    _writers[directory] = task
+    _pending.add(task)
+    task.add_done_callback(_pending.discard)
+
+    def finished(done):
+        if _writers.get(directory) is done:
+            _writers.pop(directory, None)
+
+    task.add_done_callback(finished)
+
+
+async def recover_pending() -> None:
+    """Replay retained SQLite events, including those from a previous process."""
+    async with _open_session(None) as session:
+        directory = _journal_dir(session)
+        if directory is None:
+            return
+        factory = async_sessionmaker(session.bind, expire_on_commit=False)
+    _schedule_recovery(directory, factory, asyncio.get_running_loop())
+    await drain_pending()
+
+
+def start_recovery() -> None:
+    global _recovery_task
+
+    async def run():
+        while True:
+            try:
+                await recover_pending()
+            except Exception as exc:
+                logger.warning("用量恢复尚未完成：%s", type(exc).__name__)
+                derived_counters.bump("usage_events")
+            await asyncio.sleep(5)
+
+    _recovery_task = asyncio.create_task(run())
+
+
+async def stop_recovery() -> None:
+    global _recovery_task
+    if _recovery_task is not None:
+        _recovery_task.cancel()
+        await asyncio.gather(_recovery_task, return_exceptions=True)
+        _recovery_task = None
+    await drain_pending()
 
 
 def _open_session(db: AsyncSession | None) -> AsyncSession:
@@ -118,6 +221,31 @@ def record_usage(
     ``db`` 可选：传了就把记录写进**它所属引擎**的库（生产态 = 请求同一个库）。
     """
     try:
+        session = _open_session(db)
+        directory = _journal_dir(session)
+        if directory is not None:
+            event = {
+                "kind": str(kind or "")[:20], "provider": str(provider or "")[:50],
+                "model": str(model or "")[:100], "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens, "total_tokens": total_tokens,
+                "calls": max(1, int(calls or 1)),
+                "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+                "meta": {**(meta or {}), "_usage_event_id": uuid4().hex},
+            }
+            _save_event(directory, event)
+            factory = async_sessionmaker(session.bind, expire_on_commit=False)
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                asyncio.run(_recover_directory(directory, factory))
+            else:
+                _schedule_recovery(directory, factory, loop)
+            return
+    except Exception as exc:
+        logger.warning("用量事件保存失败：%s", type(exc).__name__)
+        derived_counters.bump("usage_events")
+        return
+    try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = None
@@ -128,7 +256,7 @@ def record_usage(
         try:
             asyncio.run(
                 _insert_event(
-                    _open_session(db),
+                    session,
                     kind,
                     provider,
                     model,
@@ -145,14 +273,6 @@ def record_usage(
             )
             # `回归修复`：同口径可计数（S7）。
             derived_counters.bump("usage_events")
-        return
-
-    try:
-        session = _open_session(db)
-    except Exception as exc:  # noqa: BLE001 —— 连会话都建不出来时也绝不抛
-        logger.warning("用量记录未执行（会话不可用）：kind=%s model=%s：%s", kind, model, exc)
-        # `回归修复`：同口径可计数（S8）。
-        derived_counters.bump("usage_events")
         return
 
     task = loop.create_task(
@@ -219,9 +339,9 @@ async def record_usage_on(
 
 
 async def drain_pending() -> None:
-    """等所有在途落库任务跑完（测试与关停收尾用；生产路径**不**调用）。
+    """等所有在途落库任务跑完（测试、后台恢复和关停收尾用）。
 
-    生产路径不能等：它是 fire-and-forget，等一等就把「不阻塞主流程」那条口径丢了。
+    请求路径不能等；锁定时事件仍保留在待恢复文件中，不把排空当落库成功。
     """
     for _ in range(50):
         if not _pending:
@@ -230,4 +350,7 @@ async def drain_pending() -> None:
         await asyncio.sleep(0)
 
 
-__all__ = ["KINDS", "drain_pending", "record_usage", "record_usage_on"]
+__all__ = [
+    "KINDS", "drain_pending", "record_usage", "record_usage_on",
+    "recover_pending", "start_recovery", "stop_recovery",
+]

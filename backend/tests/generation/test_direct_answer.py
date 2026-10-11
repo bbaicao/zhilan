@@ -88,14 +88,14 @@ def test_prompts_frozen(direct_on):
 
 def test_system_prompt_three_states(direct_on):
     """开关打开：有资料 → KB 提示；无资料 → NO_MATERIAL 提示。"""
-    assert answer_mod.system_prompt(True) == FROZEN_KB
-    assert answer_mod.system_prompt(False) == FROZEN_NO_MATERIAL
+    assert answer_mod.system_prompt(True) == FROZEN_KB + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
+    assert answer_mod.system_prompt(False) == FROZEN_NO_MATERIAL + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
 
 
 def test_switch_off_is_legacy_verbatim(direct_off):
-    """开关关闭：有资料 / 无资料**都**逐字回到旧文案。"""
-    assert answer_mod.system_prompt(True) == FROZEN_LEGACY
-    assert answer_mod.system_prompt(False) == FROZEN_LEGACY
+    """S5-R1：关闭直答仍选择旧基础文案，共享事实约束同样送达。"""
+    assert answer_mod.system_prompt(True) == FROZEN_LEGACY + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
+    assert answer_mod.system_prompt(False) == FROZEN_LEGACY + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
 
 
 def test_refuse_text_is_not_direct_text():
@@ -195,7 +195,7 @@ async def test_system_prompt_matches_rendered_materials(direct_on):
         has_material=True,
         materials_text="",
     )
-    assert captured["system"] == FROZEN_NO_MATERIAL
+    assert captured["system"] == FROZEN_NO_MATERIAL + "\n\n" + answer_mod.FACTUAL_ANSWER_CONSTRAINTS
     assert "资料如下" not in captured["user"]
 
 

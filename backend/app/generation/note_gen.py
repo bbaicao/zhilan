@@ -237,6 +237,11 @@ async def _call_model(
         return await _extract_text(result)
 
     # 流式：BoundModel.stream 不接受 max_output_tokens（与 chat 同款限制）
+    from cubeloop.providers.base import BoundModel
+    if isinstance(bound, BoundModel):
+        bound = BoundModel(
+            provider=bound.provider, spec=bound.spec.model_copy(update={"max_tokens": NOTE_MAX_TOKENS})
+        )
     from app.usage.instrumentation import usage_scope
     with usage_scope(role="note_summary"):
         stream = await bound.stream(messages, system_prompt=SYSTEM_PROMPT)

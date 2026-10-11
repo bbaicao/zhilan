@@ -34,7 +34,8 @@ from pathlib import Path
 from anyio import CancelScope
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from app.api.response_time import response_time
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,6 +85,10 @@ class DocumentOut(BaseModel):
     created_at: datetime  # 契约 02:379 的 datetime；ISO 字符串由 FastAPI 序列化负责
     message: str | None
     kb_id: int
+
+    @field_serializer("created_at")
+    def serialize_time(self, value: datetime) -> datetime:
+        return response_time(value)
 
 
 class FolderFileInfo(BaseModel):
@@ -218,15 +223,16 @@ async def _read_upload_bytes(file: UploadFile) -> bytes:
     size = getattr(file, "size", None)
     if isinstance(size, int) and size > limit:
         raise HTTPException(status_code=413, detail=_TOO_LARGE_DETAIL)
-    chunks: list[bytes] = []
+    # ponytail: one growable buffer avoids retaining all 1 MiB chunks beside the joined body.
+    buffer = bytearray()
     total = 0
     while total <= limit:
         chunk = await file.read(_UPLOAD_CHUNK_BYTES)
         if not chunk:
             break
-        chunks.append(chunk)
+        buffer.extend(chunk)
         total += len(chunk)
-    return b"".join(chunks)
+    return bytes(buffer)
 
 
 # ---------------------------------------------------------------------------

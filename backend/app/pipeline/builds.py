@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from sqlalchemy import case, inspect, select, update
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
+from sqlalchemy.orm import defer, load_only
 
 from app.core.app_logging import redact
 from app.core.config import settings
@@ -76,8 +77,13 @@ def _values(snapshot: dict) -> dict:
     return values
 
 
-async def _fresh_build(session: AsyncSession, build_id: str) -> IndexBuild:
-    build = await session.get(IndexBuild, build_id, populate_existing=True)
+async def _fresh_build(
+    session: AsyncSession, build_id: str, *, with_snapshot: bool = True
+) -> IndexBuild:
+    build = await session.get(
+        IndexBuild, build_id, populate_existing=True,
+        options=[] if with_snapshot else [defer(IndexBuild.snapshot)],
+    )
     if build is None:
         raise RagError("索引构建不存在。")
     return build
@@ -256,7 +262,7 @@ async def validate_build(session: AsyncSession, build_id: str, *, embedding, sto
 
 async def check_points(session: AsyncSession, build_id: str, *, store) -> None:
     """验证完整点集与身份，SQL 发布失败/重启恢复也用同一判据。"""
-    build = await _fresh_build(session, build_id)
+    build = await _fresh_build(session, build_id, with_snapshot=False)
     rows = await build_chunks(session, build)
     expected = {point_id(build.id, row.id): row.id for row in rows}
     if set(build.point_ids) != set(expected):
@@ -343,7 +349,10 @@ async def publish_build(session: AsyncSession, build_id: str, *, embedding=None)
     build = await _fresh_build(session, build_id)
     if build.state != "validated":
         raise RagError("索引构建尚未通过校验。")
-    doc = await session.get(Document, build.document_id, populate_existing=True)
+    doc = await session.get(
+        Document, build.document_id, populate_existing=True,
+        options=[load_only(Document.id, Document.filename, Document.kb_id, Document.index_status)],
+    )
     if doc is None:
         raise RagError("文档已删除，无法发布索引。")
     document_id = int(doc.id)
@@ -399,7 +408,11 @@ async def publish_build(session: AsyncSession, build_id: str, *, embedding=None)
     await _maintain_current_links(
         session, document_id, old_title=old_title, old_kb_id=old_kb_id
     )
-    return await session.get(Document, document_id, populate_existing=True)
+    doc = await session.get(Document, document_id)
+    # Link maintenance already refreshed the published body; rollback still reloads it.
+    if doc is not None and inspect(doc).unloaded:
+        await session.refresh(doc)
+    return doc
 
 
 async def _maintain_current_links(
@@ -439,7 +452,7 @@ async def _maintain_current_links(
 
 async def clean_build_points(session: AsyncSession, build_id: str, *, store) -> bool:
     """只能清本轮 UUID 点；启用版本以及保留用于回滚的历史版本不能清。"""
-    build = await _fresh_build(session, build_id)
+    build = await _fresh_build(session, build_id, with_snapshot=False)
     active = await session.scalar(
         select(Document.active_build_id).where(Document.id == build.document_id)
     )

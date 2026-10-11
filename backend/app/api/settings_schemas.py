@@ -431,23 +431,24 @@ def data_payload(notice: str = "") -> dict:
 
     口径：
 
-    - `chroma_dir` / `chroma_path` = `QDRANT_PATH`（空则回落 `QDRANT_URL`），**如实回显配置值**，
-      v2 不做绝对化（老基线那套路径规范化属于 `app/core/data_dir.py`，v2 没有这个模块）；
+    - `chroma_dir` 回显配置，`chroma_path` 复用客户端的 `settings.qdrant_path`，
+      相对路径锚定实际数据根；无本地路径则回显 `QDRANT_URL`；
     - `exists` 只对**本地路径**做一次 `is_dir()`（单个 stat，不是 I/O 扇出）；指向 URL 时恒 `false`；
     - `files` / `size_bytes` 恒 `0`、`vectors` 恒 `-1` —— **未统计**，不是「真的没有」；
-      `-1` 的契约语义是「读不到 / 未实现」（`api.ts:972`），前端据此显示「还没有向量集合」。
+      `-1` 的契约语义是「未统计 / 无法读取」，不能据此宣称没有集合。
     """
-    local_path = (settings.QDRANT_PATH or "").strip()
-    raw = local_path or (settings.QDRANT_URL or "").strip()
+    local_path = settings.qdrant_path
+    configured_path = (settings.QDRANT_PATH or "").strip()
+    raw = configured_path or (settings.QDRANT_URL or "").strip()
     exists = False
-    if local_path:
+    if local_path is not None:
         try:
-            exists = Path(local_path).expanduser().is_dir()
+            exists = Path(local_path).is_dir()
         except OSError:  # pragma: no cover —— 非法路径（Windows 保留名等）不该炸设置页
             exists = False
     return {
         "chroma_dir": raw,
-        "chroma_path": raw,
+        "chroma_path": str(local_path) if local_path is not None else (settings.QDRANT_URL or "").strip(),
         "exists": exists,
         "files": 0,
         "size_bytes": 0,

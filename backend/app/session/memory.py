@@ -96,8 +96,16 @@ MEMORY_HEADER = "【跨会话记忆（系统自动记录的长期事实，仅供
 MEMORY_BULLET = "- "
 _CANDIDATE_LIMIT = 256
 _CORRECTION = re.compile(r"纠正|更正|改为|改成|不再|其实|而不是|\b(?:instead|correction)\b", re.I)
-_HARD_CONSTRAINT = re.compile(r"只(?:能|要|用)|必须|不要|不(?:使用|用)|禁止|仅限|\b(?:only|must|never)\b", re.I)
+_HARD_CONSTRAINT = re.compile(r"只(?:能|要|用)|必须|不要|不(?:使用|用)|禁止|仅限|\b(?:only|must|never|not|don't)\b", re.I)
 _NUMBER_UNIT = re.compile(r"(?<![\d.])(\d+(?:\.\d+)?)\s*(元|年)")
+# ponytail: bounded label aliases, not translation; broader paraphrases need a
+# separately evaluated semantic retriever, not unfiltered memory injection.
+_BILINGUAL_LABELS = (
+    ("project", "项目"), ("code", "codename", "代号"),
+    ("name", "called", "称呼", "名称"), ("preference", "preferred", "prefer", "偏好"),
+    ("language", "语言"), ("response", "reply", "respond", "回复"),
+    ("style", "风格"), ("length", "长度"),
+)
 
 
 def _knowledge_scope(filters: dict | None, chat_id: int | None) -> str:
@@ -185,6 +193,15 @@ def _normalize(text: str) -> str:
 def _text_hash(text: str) -> str:
     """规范化文本的 sha256（64 位十六进制）。"""
     return hashlib.sha256(_normalize(text).encode("utf-8")).hexdigest()
+
+
+def _relevance_terms(tokens: list[str] | set[str]) -> set[str]:
+    """Expand only the fixed bilingual labels used by memory questions."""
+    terms = set(tokens)
+    for labels in _BILINGUAL_LABELS:
+        if terms.intersection(labels):
+            terms.update(labels)
+    return terms
 
 
 # ==========================================================================
@@ -326,7 +343,7 @@ async def recall(
         )).scalars().all())
     if _HARD_CONSTRAINT.search(question) or _CORRECTION.search(question):
         return []
-    terms = {term for term in tokenize(question) if len(term) >= 2}
+    terms = _relevance_terms([term for term in tokenize(question) if len(term) >= 2])
     if not terms:
         return []
     scoped = _knowledge_scope(filters, chat_id)
@@ -368,7 +385,7 @@ async def recall(
             for value, unit in _NUMBER_UNIT.findall(row.text)
         ):
             continue
-        overlap = terms & set(tokenize(row.text))
+        overlap = terms & _relevance_terms(tokenize(row.text))
         if overlap:
             ranked.append((len(overlap), row.id, row))
     return [row for _, _, row in sorted(ranked, key=lambda item: item[:2], reverse=True)[:top_k]]
