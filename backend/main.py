@@ -157,7 +157,7 @@ async def lifespan(_app: FastAPI):
         close_vector_store()
 
 
-app = FastAPI(title="知澜", version="0.1.4", lifespan=lifespan)
+app = FastAPI(title="知澜", version="0.1.5", lifespan=lifespan)
 app.include_router(router, prefix="/api")
 app.include_router(agent_routes_router, prefix="/api")
 app.include_router(settings_router, prefix="/api")

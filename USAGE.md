@@ -2,7 +2,7 @@
 
 本文的数据、模型、日志和 start.log 位置是运行时生成的路径，不是仓库文件链接。
 
-本说明适用于知澜 v0.1.4 / v0.1.4-public.1 公开预发布，更新于 2026 年 10 月 11 日。程序、安装器与源码 ZIP 按独立发布批次清单核对；未执行新安装、升级或卸载。下载见[本版预发布页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.4-public.1)。已有 v0.1.1 本地安装包及旧版下载包不代表本次源码功能或验证。源码启动步骤见 [README](README.md)，高级配置见 [CONFIGURATION](CONFIGURATION.md)，成品边界见 [ATTACHMENTS](ATTACHMENTS.md)。
+本说明适用于知澜 v0.1.5 公开预发布，更新于 2026 年 10 月 13 日。程序、安装器与源码 ZIP 按 `public-0.1.5-release-20261013` 同批清单核对，下载见[本版预发布页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.5-public.1)；未执行本版新安装、升级或卸载。源码启动步骤见 [README](README.md)，高级配置见 [CONFIGURATION](CONFIGURATION.md)，成品边界见 [ATTACHMENTS](ATTACHMENTS.md)。
 
 回答气泡会根据后端结果标示完成、截断、停止或失败；失败时显示的部分内容不代表成功回答。历史图片只有在当前模型和上下文允许时才会继续传入。设置中的向量库位置窗口只读展示实际 Qdrant 配置；修改本机配置后需重启，窗口不会创建或搬迁数据。
 

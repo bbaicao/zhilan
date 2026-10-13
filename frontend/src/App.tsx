@@ -748,15 +748,16 @@ export default function App() {
     }
   }
 
-  /** 生成弹窗的「保存到笔记」：已有该文档的 AI 笔记则覆盖，否则新建；成功后跳转到该笔记。 */
+  /** 生成弹窗的「保存到笔记」：已有该文档的 AI 笔记则覆盖，否则新建；成功后跳转到该笔记。
+   *  失败不再只回 `false`：把真实原因（message）一并回给弹窗显示，全局 flash 行为保留。 */
   async function handleGenerateSave(payload: {
     title: string;
     content: string;
     category: string;
     tags: string[] | null;
     generation_meta: Record<string, unknown>;
-  }): Promise<boolean> {
-    if (!generateDoc) return false;
+  }): Promise<{ ok: true } | { ok: false; message: string }> {
+    if (!generateDoc) return { ok: false, message: "生成笔记的文档已关闭，请重新打开弹窗" };
     const existing = notes.find((item) => item.source_document_id === generateDoc.id);
     try {
       const saved = existing
@@ -778,10 +779,22 @@ export default function App() {
       const rows = await refreshNotes();
       setBanner("");
       jumpNote(saved.id, rows);
-      return true;
+      return { ok: true };
     } catch (err) {
-      flash(err instanceof ApiError ? err.message : "保存笔记失败");
-      return false;
+      let reason = err instanceof ApiError ? err.message : "保存笔记失败，请重试";
+      // FastAPI 422 的字段级原因在 `detail` 数组里，而 `api.ts` 只透传 `detail.message`（数组取不到 msg），
+      // 故这里补一条提取：让弹窗显示「title: String should have at most 255 characters」这类真实原因。
+      const detail: unknown = err instanceof ApiError ? err.payload : undefined;
+      if (Array.isArray(detail) && detail.length > 0) {
+        const first = detail[0] as { msg?: unknown; loc?: unknown } | undefined;
+        if (first && typeof first.msg === "string" && first.msg.trim()) {
+          const loc = Array.isArray(first.loc) ? first.loc : [];
+          const field = loc.length > 0 ? String(loc[loc.length - 1]) : "";
+          reason = field ? `${field}: ${first.msg}` : first.msg;
+        }
+      }
+      flash(reason);
+      return { ok: false, message: reason };
     }
   }
 

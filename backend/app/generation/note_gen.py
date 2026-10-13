@@ -44,6 +44,9 @@ _NUM_RE = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?%?)(?![\w.])")
 _HEADING_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
 
+# 标题上限：与后端契约 note_routes.py:64 的 title Field(max_length=255) 对齐
+_TITLE_MAX = 255
+
 # 检查器最多核对这么多项，避免长文档把 missing 刷爆
 _MAX_CHECK_ITEMS = 30
 
@@ -123,11 +126,15 @@ def parse_note_output(
         else:
             lines = text.splitlines()
             if lines:
-                title = lines[0].strip().lstrip("#").strip()
+                first = lines[0].strip().lstrip("#").strip()
+                # 疑似 JSON 的首行 / 超长首行不许当标题（改用 fallback_title）
+                if len(first) <= _TITLE_MAX and not first.startswith("{") and '"title"' not in first:
+                    title = first
                 content = "\n".join(lines[1:]).strip() or text
 
     if not title:
         title = fallback_title or "未命名笔记"
+    title = title[:_TITLE_MAX]  # 与 note_routes.py:64 的 Field(max_length=255) 对齐
 
     return GeneratedNote(
         title=title,
@@ -140,8 +147,49 @@ def parse_note_output(
     )
 
 
+# 整段 JSON 解析失败时的字段抢救：值体允许转义序列，也容忍末尾被截断的字段
+_JSON_FIELD_RE = re.compile(r'"(title|content)"\s*:\s*"((?:[^"\\]|\\.)*)(?:"|$)')
+_ESCAPE_RE = re.compile(r"\\(u[0-9a-fA-F]{4}|.)", re.DOTALL)
+_ESCAPE_MAP = {
+    "n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", '"': '"', "/": "/", "\\": "\\"
+}
+
+
+def _loose_unescape(body: str) -> str:
+    """宽容还原字符串体：合法转义照解、``\\uXXXX`` 转字符，非法转义丢反斜杠保留原字符。"""
+
+    def _sub(match: re.Match) -> str:
+        seq = match.group(1)
+        if seq[0] == "u":
+            return chr(int(seq[1:], 16))
+        return _ESCAPE_MAP.get(seq, seq)
+
+    return _ESCAPE_RE.sub(_sub, body)
+
+
+def _decode_json_string(body: str) -> str:
+    """把捞到的字段体当 JSON 字符串体解码；非法转义 / 裸控制符时退化，绝不抛给调用方。"""
+    try:
+        value = json.loads(f'"{body}"')
+    except (TypeError, ValueError):
+        return _loose_unescape(body)
+    return value if isinstance(value, str) else body
+
+
+def _salvage_json_fields(text: str) -> dict | None:
+    """整段 JSON 非法时用正则抠 ``"title"`` / ``"content"`` 两个字段并解码值。
+
+    字面 ``\\n``、``\\\\`` 等按 JSON 字符串体还原成真实正文；两个字段一个都抠不到
+    ⇒ None（交回调用方走 Markdown 兜底）。
+    """
+    fields: dict[str, str] = {}
+    for match in _JSON_FIELD_RE.finditer(text):
+        fields.setdefault(match.group(1), _decode_json_string(match.group(2)))
+    return fields or None
+
+
 def _try_parse_json(text: str) -> dict | None:
-    """从纯 JSON / 代码围栏 / 夹杂文本里抠出 JSON 对象；抠不出返回 None。"""
+    """从纯 JSON / 代码围栏 / 夹杂文本里抠出 JSON 对象；抠不出再按字段抢救，仍无则 None。"""
     candidates = [text]
     fence = _JSON_FENCE_RE.search(text)
     if fence:
@@ -158,7 +206,7 @@ def _try_parse_json(text: str) -> dict | None:
             continue
         if isinstance(data, dict):
             return data
-    return None
+    return _salvage_json_fields(text)
 
 
 def check_completeness(content: str, source_body: str) -> dict:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from copy import deepcopy
 import hashlib
+import logging
 import math
 from typing import Protocol, runtime_checkable
 from urllib.parse import urlsplit
@@ -14,6 +15,8 @@ import httpx
 from app.core.app_logging import redact
 from app.core.config import ModelConfig, settings
 from app.usage import record_usage
+
+log = logging.getLogger(__name__)
 
 
 @runtime_checkable
@@ -140,6 +143,22 @@ class OpenAICompatEmbedding:
             raise RuntimeError("embedding 返回条数与输入不一致")
         return vectors
 
+    @staticmethod
+    def _index_positions(rows: list, count: int) -> list[int] | None:
+        """响应行 index 唯一且完整覆盖输入时给出「行 → 输入位置」映射；否则 None（调用方按返回顺序兜底）。
+
+        实际厂商（DashScope 兼容端点实测）对多输入会一律回 ``index=0``：此时 index 不能用作对齐依据。
+        """
+        positions: list[int] = []
+        seen: set[int] = set()
+        for row in rows:
+            index = row.get("index") if isinstance(row, dict) else None
+            if type(index) is not int or not 0 <= index < count or index in seen:
+                return None
+            seen.add(index)
+            positions.append(index)
+        return positions
+
     async def _embed_batch(self, cfg, texts: list[str]) -> list[list[float]]:
         """一批最多两次请求、退避 0.5 秒；总耗时上限 = ``2 * timeout + 0.5``。
 
@@ -181,14 +200,17 @@ class OpenAICompatEmbedding:
                                 rows = body.get("data") if isinstance(body, dict) else None
                                 if not isinstance(rows, list) or len(rows) != len(texts):
                                     raise _EmbeddingRequestError("embedding 返回条数与输入不一致")
+                                positions = self._index_positions(rows, len(texts))
+                                if positions is None:
+                                    # 行数与向量都合法时，index 缺失／重复／越界不再整批拒绝：按返回顺序对齐。
+                                    # 只记形状（条数），不记文本、密钥或 URL 凭证。
+                                    log.warning(
+                                        "embedding 响应 index 未唯一覆盖输入（%d 条）⇒ 按返回顺序对齐", len(rows)
+                                    )
+                                    positions = list(range(len(texts)))
                                 vectors: list[list[float]] = [[] for _ in texts]
-                                seen: set[int] = set()
-                                for row in rows:
-                                    index = row.get("index") if isinstance(row, dict) else None
-                                    if type(index) is not int or not 0 <= index < len(texts) or index in seen:
-                                        raise _EmbeddingRequestError("embedding index 必须唯一且完整覆盖输入")
-                                    seen.add(index)
-                                    raw = row.get("embedding")
+                                for position, row in zip(positions, rows):
+                                    raw = row.get("embedding") if isinstance(row, dict) else None
                                     if not isinstance(raw, list) or len(raw) != self.dim:
                                         raise _EmbeddingRequestError(f"embedding 向量维度应为 {self.dim}")
                                     if any(type(value) not in (int, float) for value in raw):
@@ -199,7 +221,7 @@ class OpenAICompatEmbedding:
                                         raise _EmbeddingRequestError("embedding 向量必须为有限数值") from None
                                     if not all(math.isfinite(value) for value in vector):
                                         raise _EmbeddingRequestError("embedding 向量必须为有限数值")
-                                    vectors[index] = vector
+                                    vectors[position] = vector
                                 return vectors
                         if attempt + 1 < self._MAX_ATTEMPTS:
                             await asyncio.sleep(self._RETRY_BACKOFF)

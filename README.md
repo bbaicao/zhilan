@@ -2,17 +2,17 @@
 
 Zhilan is a local-first knowledge base and retrieval-augmented question-answering application.
 It provides a Windows desktop interface, document ingestion, source references, and optional tools.
-Version: **v0.1.4 / v0.1.4-public.1** (public prerelease; known limitations apply). Source code is licensed under **Apache-2.0**.
+Version: **v0.1.5** (public prerelease; known limitations apply). Source code is licensed under **Apache-2.0**.
 Chat and embedding require configured model services, such as an API provider or local Ollama.
 The Chinese documentation below describes setup, usage, and current limitations.
 
 ## 知澜：把自己的资料变成可检索的知识库
 
-知澜将文档、笔记与对话放在本机，帮助你从自己的资料中查找信息并生成带来源的回答。当前源码版本是 **v0.1.4**，整理日期为 **2026 年 10 月 11 日**，公开预发布标识为 **v0.1.4-public.1**。源码、Windows 完整程序和安装器见[本版下载页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.4-public.1)，实际发布身份以页面、标签及同批清单为准。成品及校验边界见 [发布附件说明](ATTACHMENTS.md)。
+知澜将文档、笔记与对话放在本机，帮助你从自己的资料中查找信息并生成带来源的回答。当前源码版本是 **v0.1.5**，整理日期为 **2026 年 10 月 13 日**，预发布标识为 **v0.1.5-public.1**。[本版下载页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.5-public.1)提供源码、Windows 完整程序和安装器，发布身份由同批 SOURCE、清单与标签绑定。旧版成品保留原身份；成品及校验边界见 [发布附件说明](ATTACHMENTS.md)。
 
 **旧版 v0.1.0-public.1 于 2026 年 10 月 8 日公开预发布。** [GitHub 仓库](https://github.com/bbaicao/zhilan)与[旧版下载页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.0-public.1)保留原快照及附件；旧下载包不代表当前源码的验证对象。v0.1.1 本地包也保留原身份。
 
-**v0.1.4 作为公开预发布／试用版交付，仍有已知质量与安装验证限制。** 当前更新包括模型设置、跨轮图片可用性、回答完成／截断／失败状态、停止与断连收尾、会话恢复和实际数据后端展示；已有联网与模型角色保存功能保留。本轮补修代码／配置上传的原始数据释放顺序，保留提前释放资源的行为。源码 ZIP、Windows 程序与安装器使用独立发布目录及同批清单核对，旧包保持原身份。变更与限制见 [版本变更](CHANGELOG.md)，发布身份和成品核对规则见 [发布说明](RELEASE.md)。
+**v0.1.5 按预发布／试用版准备，仍有已知质量与安装验证限制。** 本版在 0.1.4 公开发布线上修复生成笔记的异常 JSON／过长标题、保存失败提示和 Embedding 返回索引兼容问题；保留该发布线的上传、会话恢复、图片和回答状态修复。源码 ZIP、Windows 程序与安装器使用独立发布目录及同批清单核对，旧包保持原身份。变更与限制见 [版本变更](CHANGELOG.md)，发布身份和成品核对规则见 [发布说明](RELEASE.md)。
 
 **运行前提：安装包可以直接打开界面，但问答与向量索引需要先配置聊天、Embedding 模型服务。** 远程服务和启用鉴权的本机服务需要有效 API Key；当前版本连接免鉴权的本机 Ollama 时，也要填写非空占位 Key，例如 `ollama`。离线文档解析模型与这两类模型用途不同，导入解析模型后仍需要配置问答模型。
 

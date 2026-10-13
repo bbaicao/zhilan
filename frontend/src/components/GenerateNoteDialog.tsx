@@ -28,6 +28,13 @@ const MISSING_KIND_LABEL: Record<GeneratedNoteDraft["completeness"]["missing"][n
 const inputCls =
   "w-full rounded-lg border border-line bg-fog/[0.04] px-3 py-2 text-[13px] text-ink outline-none transition-colors placeholder:text-faint focus:border-edge";
 
+/** 保存结果：失败必须带回真实原因，供弹窗红字直接展示（不再被吞成通用文案）。 */
+type GenerateNoteSaveResult = { ok: true } | { ok: false; message: string };
+
+/** 后端 `NoteIn.title` / `NoteUpdate.title` 的上限（`note_routes.py` 的 `Field(max_length=255)`）：
+ *  超长必然 422，故前端先行拦截、不发请求。 */
+const TITLE_MAX_LENGTH = 255;
+
 type GenerateNoteDialogProps = {
   doc: { id: number; filename: string };
   /** 该文档已有的 AI 笔记（notes 里 source_document_id 匹配）：非空时明示「保存将覆盖」 */
@@ -38,7 +45,7 @@ type GenerateNoteDialogProps = {
     category: string;
     tags: string[] | null;
     generation_meta: Record<string, unknown>;
-  }): Promise<boolean>;
+  }): Promise<GenerateNoteSaveResult>;
   onClose(): void;
 };
 
@@ -116,10 +123,20 @@ export default function GenerateNoteDialog({ doc, existingNote, onSave, onClose 
 
   async function save() {
     if (!draft || saving || !title.trim()) return;
+    const trimmedTitle = title.trim();
+    // 前置拦截（不发请求）：① 超长必然被后端 422；② 以 `{` 开头通常是生成侧把整段原始 JSON 落成了标题。
+    if (trimmedTitle.length > TITLE_MAX_LENGTH) {
+      setSaveError(`标题过长（当前 ${trimmedTitle.length} 字，上限 ${TITLE_MAX_LENGTH} 字），请先修改标题`);
+      return;
+    }
+    if (trimmedTitle.startsWith("{")) {
+      setSaveError("标题疑似整段 JSON（生成侧解析异常），请先改成简短标题再保存");
+      return;
+    }
     setSaving(true);
     setSaveError("");
-    const ok = await onSave({
-      title: title.trim(),
+    const result = await onSave({
+      title: trimmedTitle,
       content: content.trim(),
       category: category.trim(),
       tags: draft.tags,
@@ -130,8 +147,8 @@ export default function GenerateNoteDialog({ doc, existingNote, onSave, onClose 
       },
     });
     setSaving(false);
-    if (ok) onClose();
-    else setSaveError("保存失败，请重试");
+    if (result.ok) onClose();
+    else setSaveError(result.message);
   }
 
   return (

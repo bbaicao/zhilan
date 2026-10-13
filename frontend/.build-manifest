@@ -1,8 +1,10 @@
 {
-  "src_tree_hash": "9b519255210a728ee8fa25ceeee69cb93bd60d34840223ef0f6f132cb9b79835",
+  "src_tree_hash": "78bedc7c1ed73f8d9f7d07ca146ed2aafc85a26ed87db75020a3035aacd7ad34",
   "src_file_count": 43,
-  "dist_tree_hash": "bdce40cc9e46d7077fc03e0a4bf04e2a41ac24d7771071c528043a5e3a4b6498",
+  "dist_tree_hash": "3ba656401214f69e215befc1fb73cf5f4f9ecbe9fc890d35228ae9c9d5afd3fd",
   "dist_file_count": 7,
-  "built_at": "2026-10-11T02:26:35",
+  "built_at": "2026-10-12T21:43:43",
+  "verified_at": "2026-10-13",
+  "build_evidence": "rr frontend-build.log, source-inputs.json and frozen-verification.json; stale inherited metadata corrected without rebuilding",
   "note": "由 backend/scripts/check_frontend_dist_freshness.py --write 生成；改 frontend/src 后须重跑 npm run build 并重生成（src/dist 两哈希都记）"
 }

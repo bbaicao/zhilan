@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import time
 import traceback
 from types import SimpleNamespace
@@ -74,18 +75,15 @@ async def test_shuffled_indices_are_restored_and_usage_is_once(wire):
     assert len(usage) == 1 and usage[0]["total_tokens"] == 7
 
 
+# 行数相等但 index 缺失／重复／越界的用例已改为「按返回顺序对齐」（见下方
+# test_unusable_index_aligns_by_return_order / test_vendor_style_all_zero_index_aligns_by_return_order）；
+# 这里只保留仍然整批拒绝的面：行数不等、行/向量形状与数值非法。
 @pytest.mark.parametrize(
     "body",
     [
         None,
         {"data": []},
         {"data": ["not-a-row"]},
-        {"data": [{"embedding": [1, 2, 3]}]},
-        {"data": [row(False)]},
-        {"data": [row("0")]},
-        {"data": [row(0.0)]},
-        {"data": [row(-1)]},
-        {"data": [row(1)]},
         {"data": [row(vector=[1, 2])]},
         {"data": [row(vector="123")]},
         {"data": [row(vector=[True, 2, 3])]},
@@ -98,12 +96,6 @@ async def test_shuffled_indices_are_restored_and_usage_is_once(wire):
         "root",
         "count",
         "row",
-        "missing-index",
-        "bool-index",
-        "str-index",
-        "float-index",
-        "negative-index",
-        "overflow-index",
         "dim",
         "vector-type",
         "bool-value",
@@ -123,13 +115,81 @@ async def test_invalid_response_is_rejected_without_retry(wire, body):
     assert len(usage) == 1 and usage[0]["total_tokens"] is None
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"data": [{"embedding": [1, 2, 3]}]},
+        {"data": [row(False)]},
+        {"data": [row("0")]},
+        {"data": [row(0.0)]},
+        {"data": [row(-1)]},
+        {"data": [row(1)]},
+    ],
+    ids=[
+        "missing-index",
+        "bool-index",
+        "str-index",
+        "float-index",
+        "negative-index",
+        "overflow-index",
+    ],
+)
 @pytest.mark.asyncio
-async def test_duplicate_index_and_invalid_json_are_rejected(wire):
+async def test_unusable_index_aligns_by_return_order(wire, body):
+    """行数与输入条数相等时，index 缺失／越界／非整数不再整批拒绝，按返回顺序对齐。"""
     install, _, usage = wire
-    calls = install([response({"data": [row(0), row(0)]}), response(text="{bad-json")])
+    calls = install([response(body)])
+    assert await embed_mod.OpenAICompatEmbedding().embed_texts(["a"]) == [[1.0, 2.0, 3.0]]
+    assert len(calls) == 1
+    assert len(usage) == 1 and usage[0]["total_tokens"] is None
+
+
+@pytest.mark.asyncio
+async def test_vendor_style_all_zero_index_aligns_by_return_order(wire):
+    """真机形态（DashScope 兼容端点）：4 条不同输入全部回 index=0，必须按返回顺序对齐。"""
+    install, _, usage = wire
+    calls = install([response({"data": [row(0, [float(i), 0.0, 0.0]) for i in range(4)]})])
+    assert await embed_mod.OpenAICompatEmbedding().embed_texts(["a", "b", "c", "d"]) == [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+        [3.0, 0.0, 0.0],
+    ]
+    assert len(calls) == 1
+    assert len(usage) == 1
+
+
+@pytest.mark.asyncio
+async def test_index_fallback_warning_carries_no_text_or_credentials(wire, caplog):
+    """兜底路径可记一条 warning，但日志里不得出现文本内容、密钥或 URL 凭证。"""
+    install, cfg, _ = wire
+    install([response({"data": [row(0), row(0)]})])
+    with caplog.at_level(logging.WARNING, logger="app.vector.embed"):
+        await embed_mod.OpenAICompatEmbedding().embed_texts(["secret-text-a", "secret-text-b"])
+    records = [item for item in caplog.records if item.name == "app.vector.embed"]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert "secret-text-a" not in message and "secret-text-b" not in message
+    assert cfg.api_key not in message and cfg.base_url not in message
+
+
+@pytest.mark.asyncio
+async def test_row_count_mismatch_still_rejects_whole_batch(wire):
+    """行数不等于输入条数时仍是整批拒绝，错误文案保持不变。"""
+    install, _, usage = wire
+    calls = install([response({"data": [row(0), row(0), row(0)]})])
+    with pytest.raises(RuntimeError, match="embedding 调用失败：embedding 返回条数与输入不一致"):
+        await embed_mod.OpenAICompatEmbedding().embed_texts(["a", "b", "c", "d"])
+    assert len(calls) == 1
+    assert len(usage) == 1 and usage[0]["total_tokens"] is None
+
+
+@pytest.mark.asyncio
+async def test_duplicate_index_aligns_by_order_and_invalid_json_is_rejected(wire):
+    install, _, usage = wire
+    calls = install([response({"data": [row(0), row(0, [7, 8, 9])]}), response(text="{bad-json")])
     client = embed_mod.OpenAICompatEmbedding()
-    with pytest.raises(RuntimeError, match="index"):
-        await client.embed_texts(["a", "b"])
+    assert await client.embed_texts(["a", "b"]) == [[1.0, 2.0, 3.0], [7.0, 8.0, 9.0]]
     with pytest.raises(RuntimeError, match="JSON"):
         await client.embed_texts(["a"])
     assert len(calls) == 2
