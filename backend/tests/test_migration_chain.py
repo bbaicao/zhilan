@@ -63,7 +63,9 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 # 算法升级 U2：构建身份、正文版本与按构建保留分块。
 # 算法升级 U3：SQL 词项倒排及笔记内部片段。
 # 算法升级 U6：记忆修订链、有效时间与来源摘要。
-EXPECTED_HEAD = "0010"
+# 专项 · 图谱自动连线 = 0011（document_similarity_edges：文档代表向量余弦的相似边；
+# 默认关态下新表不读不写，见 backend/app/pipeline/graphlink.py）。
+EXPECTED_HEAD = "0011"
 
 
 @pytest.fixture

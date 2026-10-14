@@ -1,10 +1,10 @@
 {
-  "src_tree_hash": "78bedc7c1ed73f8d9f7d07ca146ed2aafc85a26ed87db75020a3035aacd7ad34",
+  "src_tree_hash": "2b8d749b7af473c800d1caaeff216422b9f6fb60828e9ae8978bca41a5a0b848",
   "src_file_count": 43,
-  "dist_tree_hash": "3ba656401214f69e215befc1fb73cf5f4f9ecbe9fc890d35228ae9c9d5afd3fd",
+  "dist_tree_hash": "850037055310b939466f4cf1b02e1d0709a2618b8ec00840d5f761ffdd6bee3c",
   "dist_file_count": 7,
-  "built_at": "2026-10-12T21:43:43",
-  "verified_at": "2026-10-13",
-  "build_evidence": "rr frontend-build.log, source-inputs.json and frozen-verification.json; stale inherited metadata corrected without rebuilding",
+  "built_at": "2026-10-14T11:15:34",
+  "verified_at": "2026-10-14",
+  "build_evidence": "public-0.1.6 build line: build/release-ready-0.1.6-20261014/frontend-build.log (tsc -b + vite build, bundle index-KnjpHK0i.js) and frontend-freshness.log; frozen-verification.json binds the same 7 dist files",
   "note": "由 backend/scripts/check_frontend_dist_freshness.py --write 生成；改 frontend/src 后须重跑 npm run build 并重生成（src/dist 两哈希都记）"
 }

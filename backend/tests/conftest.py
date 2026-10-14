@@ -74,6 +74,7 @@ _CLEAN_ORDER = (
     "lexical_materials",
     "chunks",
     "document_builds",
+    "document_similarity_edges",
     "documents",
     "notes",
     "wiki_links",

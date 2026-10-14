@@ -2,7 +2,9 @@
 
 本文的数据、模型、日志和 start.log 位置是运行时生成的路径，不是仓库文件链接。
 
-本说明适用于知澜 v0.1.5 公开预发布，更新于 2026 年 10 月 13 日。程序、安装器与源码 ZIP 按 `public-0.1.5-release-20261013` 同批清单核对，下载见[本版预发布页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.5-public.1)；未执行本版新安装、升级或卸载。源码启动步骤见 [README](README.md)，高级配置见 [CONFIGURATION](CONFIGURATION.md)，成品边界见 [ATTACHMENTS](ATTACHMENTS.md)。
+本说明适用于知澜 v0.1.6 本地候选，更新于 2026 年 10 月 14 日。程序、安装器与源码 ZIP 按 `public-0.1.6-ready-20261014` 同批清单核对；本批尚未提交、打标签或上传，可下载的[上一个发布页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.5-public.1)仍是 v0.1.5；未执行本版新安装、升级或卸载。源码启动步骤见 [README](README.md)，高级配置见 [CONFIGURATION](CONFIGURATION.md)，成品边界见 [ATTACHMENTS](ATTACHMENTS.md)。
+
+图谱面板会显示资料之间的「内容接近」相似边（v0.1.6 新增，默认开启）：导入或重建索引完成后自动生成，可在图谱里按边类型显示或隐藏。它只表示两篇文档的代表向量接近，不代表事实关系，也不参与检索与回答；不需要时在 `.env` 中设置 `GRAPHLINK_ENABLE=false` 并重启。
 
 回答气泡会根据后端结果标示完成、截断、停止或失败；失败时显示的部分内容不代表成功回答。历史图片只有在当前模型和上下文允许时才会继续传入。设置中的向量库位置窗口只读展示实际 Qdrant 配置；修改本机配置后需重启，窗口不会创建或搬迁数据。
 

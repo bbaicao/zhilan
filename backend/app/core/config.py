@@ -488,6 +488,26 @@ class Settings(BaseSettings):
     # （候选行上限 = 本值 × 4，见 graph.py::CANDIDATE_LIMIT_FACTOR）。夹到 ≥1。
     GRAPHRAG_MAX_TERMS: int = 8
 
+    # --- 导入资料自动连线（专项 · 2026-10-08）---
+    # 文档「内容接近」边的总开关（消费方 = `app/pipeline/graphlink.py`；`graphlink.enabled()`
+    # 是**唯一**开关读取点）。默认开启；显式关闭时维护链在碰表之前返回，
+    # `build_graph` 连 `document_similarity_edges` 都不 SELECT（`GET /api/graph` 输出不变）。
+    # ⚠️ 语义是**向量相似**（两篇文档代表向量的余弦），**不是事实关系**，且**不参与召回**
+    # （检索/回答链路零改动）。⚠️ 只走 .env：不加设置页字段、不动 02 端点面。
+    # 维护链**零模型调用**（只读既有向量）⇒ `tests/verify_v2.py` 的禁网矩阵同款适用。
+    GRAPHLINK_ENABLE: bool = True
+    # 每篇文档保留的**单向**名额（口径 = 两端的 top-K **并集**，不是全局 top-K）。
+    GRAPHLINK_TOP_K: int = 3
+    # 余弦阈值。**0.65 是方案给的试验起点、未标定**：别把它读成调参结论。
+    GRAPHLINK_MIN_SCORE: float = 0.65
+    # 每篇文档的**度数上限**（剪枝后的最终度）；默认与 TOP_K 同值但语义不同：
+    # 前者管候选并集，这里管最终每篇能连几条。
+    GRAPHLINK_MAX_DEGREE: int = 3
+    # 每篇文档参与代表向量的分块上限（按序号**等距均匀抽样**；不足 1 块 ⇒ 跳过该篇并计数）。
+    GRAPHLINK_MAX_CHUNKS_PER_DOC: int = 64
+    # 单库参与连线的文档数上限：超出**跳过并写日志 + 计数**（不做半库结果 —— 全量口径的唯一例外）。
+    GRAPHLINK_MAX_DOCS_PER_KB: int = 2000
+
     # --- 多服务配置（设置页「API Key 服务」）---
     # MODEL_SERVICES：服务注册表，单行 JSON 数组，元素为
     #   {id, name, provider, base_url, api_key, models: [...],

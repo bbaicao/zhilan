@@ -55,13 +55,19 @@ TEN_KEYS = (
     "stale_vector_points",
     "trace_persist",
     "tool_result_channel",
+    # 🔴 2026-10-08 专项「导入资料自动连线」：第四轮只增（十 → **十一**）。
+    # ⚠️ 常量名沿历史（`TEN_KEYS`）；它现在锚的是「11 键 + 此序」，判据力不变。
+    "similar_links",
 )
 
 #: ② 批次三**之前**的八键（逐字，用于钉「只增不改义」）。
 BEFORE_BATCH3_KEYS = TEN_KEYS[:8]
 
-#: ③ 本批新增两键（语义 = Lead 定稿键法）。
+#: ③ 批次三新增两键（语义 = Lead 定稿键法）。
 NEW_KEYS = ("trace_persist", "tool_result_channel")
+
+#: ④ 2026-10-08 专项「导入资料自动连线」在**最尾**追加的一键（只增不改义）。
+LATEST_KEYS = ("similar_links",)
 
 
 @pytest.fixture(autouse=True)
@@ -84,13 +90,15 @@ def test_key_set_is_exactly_ten_and_first_eight_verbatim():
     """
     keys = tuple(derived_counters.COUNTER_KEYS)
     assert keys == TEN_KEYS, f"键集漂移：实现={keys} 独立锚={TEN_KEYS}"
-    assert len(keys) == 10, f"本批键集必须恰十键，现读 {len(keys)}"
-    assert len(set(keys)) == 10, f"键集有重复：{keys}"
+    # 2026-10-08 专项「导入资料自动连线」同步：10 → 11（**等价强化**：仍是逐字精确钉，未放宽）。
+    assert len(keys) == 11, f"键集必须恰十一键，现读 {len(keys)}"
+    assert len(set(keys)) == 11, f"键集有重复：{keys}"
     assert keys[:8] == BEFORE_BATCH3_KEYS, (
         "既有八键的**名/义/顺序**必须逐字不动（只增不改义）："
         f"{keys[:8]} vs {BEFORE_BATCH3_KEYS}"
     )
-    assert keys[8:] == NEW_KEYS, f"两新键必须追加在尾部：{keys[8:]} vs {NEW_KEYS}"
+    assert keys[8:10] == NEW_KEYS, f"批次三两新键必须追加在批次三尾部：{keys[8:10]} vs {NEW_KEYS}"
+    assert keys[10:] == LATEST_KEYS, f"第四轮新键必须追加在**最尾**：{keys[10:]} vs {LATEST_KEYS}"
 
 
 def test_zero_state_has_all_ten_keys_and_all_zero():

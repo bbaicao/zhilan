@@ -71,6 +71,10 @@ COUNTER_KEYS: tuple[str, ...] = (
     # `except OSError`(S14) 判定为**不收**（fail-closed，不是吞点 ⇒ 不写码）。
     "trace_persist",   # 本轮尾部溯源/审计落库失败（`chat_routes` 归因落库 #5 + 审计回填 #6）
     "tool_result_channel",  # 工具结果通道降级（`runner` 通道构造失败 #24 + 写通道三键不全 #29 + `tool_artifacts._fail()` #30）
+    # 🔴 2026-10-08 专项「导入资料自动连线」：**只增**第十一键（十键 → 十一键），
+    # 既有十键的**名/义/顺序逐字不动**，新键只准**追加在尾部**。
+    "similar_links",  # 相似边维护链降级（pipeline/graphlink.py：代表向量算不出的分块/文档、
+                       # 单库超 `GRAPHLINK_MAX_DOCS_PER_KB` 跳过、水印不符未提交、异常回滚）
 )
 
 #: 模块内计数（**进程全局**；与 graph/cache/memory 同型）。

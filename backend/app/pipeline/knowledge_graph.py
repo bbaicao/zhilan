@@ -24,7 +24,8 @@ from sqlalchemy import and_, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import derived_counters
-from app.models import Document, Note, WikiLink
+from app.models import Document, DocumentSimilarityEdge, IndexBuild, Note, WikiLink
+from app.pipeline import graphlink
 from app.pipeline.wikilink import _stem, normalize_title, other_endpoint
 
 GraphKey = tuple[int, str, int]  # kb_id, source_type, source_id
@@ -161,6 +162,23 @@ def tags_list(raw) -> list[str]:
                 return [str(item).strip() for item in value if str(item).strip()]
         return [str(key).strip() for key in raw.keys() if str(key).strip()]
     return []
+
+
+def _build_dim(fingerprint) -> int:
+    """当前构建的向量维度（`fingerprint.embedding.dim`）；没有该身份（legacy 构建）⇒ 0 = 未知。
+
+    `dim` 不是一个独立列 —— 它随 `IndexBuild.fingerprint`（`embedding_identity`）走，这里按
+    同一份身份读出来与边表记录的 `dim` 比对（P2-B）。
+    """
+    if not isinstance(fingerprint, dict):
+        return 0
+    embedding = fingerprint.get("embedding")
+    if not isinstance(embedding, dict):
+        return 0
+    try:
+        return int(embedding.get("dim") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 async def build_graph(db: AsyncSession) -> dict:
@@ -302,6 +320,57 @@ async def build_graph(db: AsyncSession) -> dict:
             target = node_id("document", item.source_document_id)
             if nodes_by_id[source]["kb_id"] == nodes_by_id[target]["kb_id"]:
                 add_edge(source, target, "source")
+
+    # 导入资料自动连线（专项 · 2026-10-08）：相似边 = 两篇文档的**内容接近**边。
+    # 关态下连本表都不 SELECT（`GET /api/graph` 输出与改动前逐字一致）。
+    # 源/目标缺失（硬删残留）或两端不同库照 wiki 边丢弃并计数 ⇒ 与既有边同一套可见性口径。
+    if graphlink.enabled():
+        # P2-B：边表的 `space_id` / `dim` 是**写入当时那一份构建**的身份（表里不做版本管理）。
+        # 文档重建、换 embedding 模型或改维度之后，旧边与当前构建不兼容 —— 照画等于把两个
+        # 空间的坐标当成一个空间用（前端只看 source/target/kind，没法自己判断）。payload
+        # 形状不变：不兼容的边直接不进，只计数，不加字段（边仍只有 source/target/kind）。
+        current = {
+            int(row[0]): (str(row[1] or ""), _build_dim(row[2]))
+            for row in (await db.execute(
+                select(Document.id, IndexBuild.space_id, IndexBuild.fingerprint)
+                .join(IndexBuild, and_(
+                    IndexBuild.id == Document.active_build_id,
+                    IndexBuild.document_id == Document.id,
+                ))
+                .where(Document.deleted_at.is_(None))
+            )).all()
+        }
+        similar = (await db.execute(
+            select(
+                DocumentSimilarityEdge.source_document_id,
+                DocumentSimilarityEdge.target_document_id,
+                DocumentSimilarityEdge.space_id,
+                DocumentSimilarityEdge.dim,
+            ).order_by(
+                DocumentSimilarityEdge.source_document_id,
+                DocumentSimilarityEdge.target_document_id,
+            )
+        )).all()
+        for row in similar:
+            source = node_id("document", row[0])
+            target = node_id("document", row[1])
+            if source not in nodes_by_id or target not in nodes_by_id:
+                derived_counters.bump("graph_view_edges")
+                continue
+            if nodes_by_id[source]["kb_id"] != nodes_by_id[target]["kb_id"]:
+                derived_counters.bump("graph_view_edges")
+                continue
+            left, right = current.get(int(row[0])), current.get(int(row[1]))
+            if left is None or left != right:
+                derived_counters.bump("graph_view_edges")  # 两端必须同处一个当前空间
+                continue
+            if left[0] != str(row[2] or ""):
+                derived_counters.bump("graph_view_edges")  # 边的坐标空间 ≠ 当前空间
+                continue
+            if left[1] and left[1] != int(row[3] or 0):
+                derived_counters.bump("graph_view_edges")  # 维度不等 ⇒ 不是一个空间
+                continue
+            add_edge(source, target, "similar")
 
     degree: dict[str, int] = {item["id"]: 0 for item in nodes}
     for edge in edges:

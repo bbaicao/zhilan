@@ -35,6 +35,7 @@ from sqlalchemy.orm import load_only
 from app.core import derived_counters
 from app.core.errors import DuplicateDocument, RagError
 from app.models import Chunk, Document, IndexBuild, active_chunks
+from app.pipeline import graphlink
 from app.pipeline import storage
 from app.pipeline import wikilink
 from app.pipeline.cleaning import clean
@@ -1038,6 +1039,9 @@ async def purge_document(session: AsyncSession, document_id: int) -> None:
     await wikilink.remove_links_for_deleted(
         session, "document", int(document_id), old_kb_id=old_kb_id, old_title=old_title
     )
+    # 导入资料自动连线（专项 · 2026-10-08）：硬删文档时清掉**两端**相似边（本表无外键，
+    # 只能显式清）。关态直接返回 0（连表都不碰）；开态失败不挡硬删本身（同 wiki 边先例）。
+    await graphlink.delete_edges_for_document(session, int(document_id))
 
 
 async def rechunk_document(session: AsyncSession, document_id: int) -> IngestResult:

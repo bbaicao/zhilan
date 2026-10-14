@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import RagError
 from app.models import Document, IndexBuild
+from app.pipeline import graphlink
 from app.pipeline.builds import processing_fingerprint
 from app.pipeline.cleaning import rule_fingerprint
 from app.pipeline.ingest import (
@@ -85,11 +86,23 @@ async def reindex_documents(
     - 空库全量 → 全 0 的 ``ReindexResult``（仍是 200）；
     - 单文档失败不中断整批：记 failed + messages，继续下一个。
     """
+    # P3②（批量重建只在收尾算一次）：范围内逐篇发布钩子**暂缓**，收尾对每个受影响库重算一次。
+    # `batch_scope` 走任务局部 ContextVar + finally 恢复 ⇒ 并发普通导入照常触发，批次抛错/取消
+    # 都不泄漏暂缓态；这里只多包一层范围，下面的循环（含单篇失败继续的语义）一字未动。
+    with graphlink.batch_scope():
+        return await _reindex_documents(session, document_id)
+
+
+async def _reindex_documents(
+    session: AsyncSession, document_id: int | None = None,
+) -> ReindexResult:
+    """`reindex_documents` 的实现体（包在 `graphlink.batch_scope()` 里，单独成函数便于引用）。"""
     current_fp = rule_fingerprint()
     processing = processing_fingerprint()
     targets = [(doc.id, doc.filename) for doc in await _load_targets(session, document_id)]
 
     result = ReindexResult()
+    kb_ids: set[int] = set()
     # 笔记向量属检索阶段（阶段 3），本阶段不实现——不写 notes，也不假报数字
     result.messages.append("本阶段不重建笔记向量（notes=0，归属检索阶段）。")
 
@@ -98,6 +111,7 @@ async def reindex_documents(
             doc = await session.get(Document, doc_id, populate_existing=True)
             if doc is None or doc.deleted_at is not None:
                 raise RagError("文档已删除，无法重建索引。")
+            kb_ids.add(int(doc.kb_id or 1))
             report = doc.clean_report if isinstance(doc.clean_report, dict) else None
             stale = _needs_reclean(report, current_fp)
             stored = bool((doc.file_path or "").strip())
@@ -148,6 +162,20 @@ async def reindex_documents(
             log.warning("reindex id=%s 失败: %s", doc_id, exc)
             result.failed += 1
             result.messages.append(f"id={doc_id} {filename}：{exc}")
+
+    # 导入资料自动连线（专项 · 2026-10-08）：按**涉及的库**全量重算「内容接近」边。
+    # 关态下 `recompute_for_kb_ids` 直接返回 []（连新表都不 SELECT）；结果只写既有
+    # `messages` 字段 —— `ReindexResult` 形状冻结，不给它加字段。
+    if graphlink.enabled() and kb_ids:
+        try:
+            for outcome in await graphlink.recompute_for_kb_ids(session, sorted(kb_ids)):
+                result.messages.append(
+                    f"连线 kb_id={outcome['kb_id']}：{outcome['status']}，"
+                    f"写入 {outcome['edges']} 条（参与文档 {outcome['documents']} 篇）。"
+                )
+        except Exception as exc:  # noqa: BLE001 —— 派生边失败不改本次重建的统计
+            await session.rollback()
+            log.warning("重建索引收尾连线重算失败：%s", exc)
 
     # orphans_removed：覆盖写路径下不做跨库孤儿扫描，如实报 0
     return result

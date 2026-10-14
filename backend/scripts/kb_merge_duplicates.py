@@ -1,13 +1,14 @@
 r"""knowledge_bases 唯一身份：只读预检 / 合并 / 恢复 / 向量修复（S6 · 186）。
 
 **为什么不能只写一段裸 SQL 合并**：唯一身份去重会**不可逆地删行并改引用**
-（``notes.kb_id`` / ``documents.kb_id`` / ``wiki_links.kb_id`` 三处普通 Integer 引用，
+（``notes.kb_id`` / ``documents.kb_id`` / ``wiki_links.kb_id`` /
+``document_similarity_edges.kb_id`` 四处普通 Integer 引用，
 含回收站行）。裸 SQL 既拿不出「改前长什么样」，也说不清「谁被并到了谁」——
 出了纠纷没有回头路。本器把这件事拆成四段，每段都能单独跑、单独验：
 
 | 模式 | 写什么 | 输出 |
 |---|---|---|
-| ``--preflight``（默认） | SQL 数据只读，写预检材料 | ``preflight-report-<ts>.json`` / ``.md``：重复组、每组差异、old→kept 映射、三张表引用行数、KB 全字段 before-image |
+| ``--preflight``（默认） | SQL 数据只读，写预检材料 | ``preflight-report-<ts>.json`` / ``.md``：重复组、每组差异、old→kept 映射、各引用表引用行数、KB 全字段 before-image |
 | ``--apply`` | 一个事务里改引用 + 删重复行（+ 回填 key 列，若列在） | 独占批次目录、before-image、redirects、恢复 SQL 与 pending；SQL 成功后应用仍阻断 |
 | ``--repair-vector`` | 向量侧按最初快照的点 id 改写 payload ``kb_id``（旧 id → 保留 id） | 不覆盖的 ``vector-points-*.json`` + hash 封条；重试复用首轮快照 |
 | ``--verify-synced`` | 向量数据只读，写核验材料（可执行的「重新开放条件」） | 逐组读数：旧 id 的过滤召回必须为 0、快照里的点必须都在且 ``kb_id`` 已指到保留行；任一不满足 ⇒ 非零退出 |
@@ -117,8 +118,11 @@ KB_FIELDS: tuple[str, ...] = (
     "status",
     "last_sync_at",
 )
-# 三处 kb_id 引用（都是普通 Integer，不是外键；含回收站行 —— 软删只是 deleted_at 非空）
-REF_TABLES: tuple[str, ...] = ("notes", "documents", "wiki_links")
+# kb_id 引用（都是普通 Integer，不是外键；含回收站行 —— 软删只是 deleted_at 非空）。
+# 第四张 document_similarity_edges 由「导入资料自动连线」专项追加：它的 kb_id 决定
+# `GET /api/graph` 里 similar 边画在哪个库 —— 不跟着改向就会把边画进错的库（静默错图）。
+# 追加是**纯扩容**：老库（迁移 0006 的测试库等）没有这张表时由 _existing_ref_tables 过滤掉。
+REF_TABLES: tuple[str, ...] = ("notes", "documents", "wiki_links", "document_similarity_edges")
 # 只有这两个字段全组一致才允许自动合并：kind 改语义，collection 换向量集合。
 INCOMPATIBLE_FIELDS: tuple[str, ...] = ("kind", "collection")
 # 报告里要逐组比对的字段（差异如实登记，但**不**因此拒绝合并）

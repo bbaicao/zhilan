@@ -136,7 +136,8 @@ export type GraphNode = {
 export type GraphEdge = {
   source: string;
   target: string;
-  kind: "wiki" | "source";
+  /** `similar` = 文档代表向量的内容相似边（向量近邻），**不是事实关系**。 */
+  kind: "wiki" | "source" | "similar";
 };
 
 export type GraphData = {

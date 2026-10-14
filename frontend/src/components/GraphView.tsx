@@ -30,7 +30,35 @@ type SimNode = GraphNode & {
   pinned: boolean;
 };
 
-/** 图数据 + 预建索引：id → 节点。热循环里禁止 Array.find，一律走 Map。 */
+/** 边类型开关：三种边各自可关；`similar` 默认开（内容相似边，非事实关系）。 */
+type EdgeKinds = { wiki: boolean; source: boolean; similar: boolean };
+
+const EDGE_KINDS_DEFAULT: EdgeKinds = { wiki: true, source: true, similar: true };
+
+const EDGE_KIND_ITEMS: { key: keyof EdgeKinds; label: string }[] = [
+  { key: "wiki", label: "双链" },
+  { key: "source", label: "来源" },
+  { key: "similar", label: "相似边" },
+];
+
+/** 未知 kind 一律保留：后端 kind 只加不改，前端不能把没见过的新边悄悄吃掉。 */
+function filterEdges(edges: GraphEdge[], kinds: EdgeKinds): GraphEdge[] {
+  return edges.filter((edge) => kinds[edge.kind] !== false);
+}
+
+function adjacencyOf(nodes: { id: string }[], edges: GraphEdge[]): Map<string, Set<string>> {
+  const byId = new Set(nodes.map((item) => item.id));
+  const adjacency = new Map(nodes.map((item) => [item.id, new Set<string>()]));
+  for (const edge of edges) {
+    if (!byId.has(edge.source) || !byId.has(edge.target)) continue;
+    adjacency.get(edge.source)!.add(edge.target);
+    adjacency.get(edge.target)!.add(edge.source);
+  }
+  return adjacency;
+}
+
+/** 图数据 + 预建索引：id → 节点。热循环里禁止 Array.find，一律走 Map。
+ *  传入的 `edges` 必须是**图例开关过滤后**的边，邻接表跟着同一份边走。 */
 type GraphStore = {
   nodes: SimNode[];
   byId: Map<string, SimNode>;
@@ -39,14 +67,12 @@ type GraphStore = {
 };
 
 function makeStore(nodes: SimNode[], edges: GraphEdge[]): GraphStore {
-  const byId = new Map(nodes.map((item) => [item.id, item]));
-  const adjacency = new Map(nodes.map((item) => [item.id, new Set<string>()]));
-  for (const edge of edges) {
-    if (!byId.has(edge.source) || !byId.has(edge.target)) continue;
-    adjacency.get(edge.source)!.add(edge.target);
-    adjacency.get(edge.target)!.add(edge.source);
-  }
-  return { nodes, byId, edges, adjacency };
+  return {
+    nodes,
+    byId: new Map(nodes.map((item) => [item.id, item])),
+    edges,
+    adjacency: adjacencyOf(nodes, edges),
+  };
 }
 
 type CoordMap = Record<string, { x: number; y: number }>;
@@ -71,6 +97,8 @@ type GraphSkin = {
   edgeDim: string;
   edge: string;
   edgeSource: string;
+  /** 相似边（内容接近，非事实关系）：虚线 + 独立颜色，便于与双链/来源区分。 */
+  edgeSimilar: string;
   edgeActive: string;
   ghostStroke: string;
   label: string;
@@ -86,6 +114,7 @@ const GRAPH_SKIN: Record<"dark" | "light", GraphSkin> = {
     edgeDim: "rgba(140, 140, 148, 0.06)",
     edge: "rgba(140, 140, 148, 0.22)",
     edgeSource: "rgba(108, 182, 255, 0.28)",
+    edgeSimilar: "rgba(178, 148, 255, 0.34)",
     edgeActive: "rgba(232, 160, 84, 0.85)",
     ghostStroke: "rgba(142,142,147,0.7)",
     label: "rgba(214,214,217,0.9)",
@@ -99,6 +128,7 @@ const GRAPH_SKIN: Record<"dark" | "light", GraphSkin> = {
     edgeDim: "rgba(60, 60, 66, 0.07)",
     edge: "rgba(60, 60, 66, 0.2)",
     edgeSource: "rgba(29, 111, 197, 0.3)",
+    edgeSimilar: "rgba(124, 88, 205, 0.36)",
     edgeActive: "rgba(168, 107, 37, 0.9)",
     ghostStroke: "rgba(110, 110, 118, 0.8)",
     label: "rgba(45, 44, 50, 0.92)",
@@ -273,6 +303,8 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
     document: true,
     ghost: true,
   });
+  const [edgeKinds, setEdgeKinds] = useState<EdgeKinds>(EDGE_KINDS_DEFAULT);
+  const [rawEdges, setRawEdges] = useState<GraphEdge[]>([]);
   const [category, setCategory] = useState("全部");
   const [hideIsolated, setHideIsolated] = useState(false);
   const [colorMode, setColorMode] = useState<"type" | "category">("type");
@@ -282,6 +314,31 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [hoverTitle, setHoverTitle] = useState<string>("");
+
+  /** 图例开关过滤后的边：store / 布局 / 局部图 / 绘制 / 孤立数全部只认这一份。 */
+  const filteredEdges = useMemo(
+    () => filterEdges(rawEdges, edgeKinds),
+    [rawEdges, edgeKinds],
+  );
+
+  /** 过滤后的邻接表：局部图 / 邻域在**同一次渲染里**就用它，不等 store 重建。 */
+  const filteredAdjacency = useMemo(
+    () => adjacencyOf(dataRef.current?.nodes ?? [], filteredEdges),
+    [filteredEdges, loading, stats],
+  );
+
+  /** 显示的孤立数本地重算：后端 `stats.isolated` 是服务端口径（含全部边、不含图例开关）。 */
+  const isolatedCount = useMemo(() => {
+    const all = dataRef.current;
+    if (!all) return 0;
+    const linked = new Set<string>();
+    for (const edge of filteredEdges) {
+      if (!all.byId.has(edge.source) || !all.byId.has(edge.target)) continue;
+      linked.add(edge.source);
+      linked.add(edge.target);
+    }
+    return all.nodes.reduce((sum, item) => (linked.has(item.id) ? sum : sum + 1), 0);
+  }, [filteredEdges, loading, stats]);
 
   const categories = useMemo(() => {
     const nodes = dataRef.current?.nodes;
@@ -310,7 +367,7 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
     );
     if (hideIsolated) {
       const linked = new Set<string>();
-      for (const edge of all.edges) {
+      for (const edge of filteredEdges) {
         if (ids.has(edge.source) && ids.has(edge.target)) {
           linked.add(edge.source);
           linked.add(edge.target);
@@ -320,11 +377,11 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
     }
     const root = selectedId || (focus ? `${focus.type}:${focus.id}` : null);
     if (localMode && root && ids.has(root)) {
-      const keep = neighborhood(all.adjacency, root, hops);
+      const keep = neighborhood(filteredAdjacency, root, hops);
       ids = new Set([...ids].filter((id) => keep.has(id)));
     }
     return ids;
-  }, [loading, stats, types, category, hideIsolated, localMode, hops, selectedId, focus, dataRef.current?.edges?.length]);
+  }, [loading, stats, types, category, hideIsolated, localMode, hops, selectedId, focus, filteredEdges, filteredAdjacency]);
 
   const hits = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -351,7 +408,7 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
     const saved = loadCoords();
     const next = buildSimNodes(
       all.nodes.map(({ degree, ...rest }) => ({ ...rest, degree })),
-      all.edges,
+      filteredEdges,
       saved,
     );
     for (const item of next) {
@@ -364,12 +421,12 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
       item.x = Math.cos(angle) * radius + ((hashHue(item.id + "x") % 80) - 40);
       item.y = Math.sin(angle) * radius + ((hashHue(item.id + "y") % 80) - 40);
     }
-    dataRef.current = makeStore(next, all.edges);
+    dataRef.current = makeStore(next, filteredEdges);
     energyRef.current = 1;
     pendingFitRef.current = true;
     redraw();
     onNotify("已重置布局，坐标记忆已清空");
-  }, [onNotify, redraw]);
+  }, [filteredEdges, onNotify, redraw]);
 
   const focusNode = useCallback(
     (nodeId: string) => {
@@ -417,7 +474,9 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
     getGraph()
       .then((data) => {
         if (!alive) return;
-        dataRef.current = makeStore(buildSimNodes(data.nodes, data.edges, loadCoords()), data.edges);
+        const edges = filterEdges(data.edges, EDGE_KINDS_DEFAULT);
+        setRawEdges(data.edges);
+        dataRef.current = makeStore(buildSimNodes(data.nodes, edges, loadCoords()), edges);
         setStats(data.stats);
         setLoading(false);
         energyRef.current = 1;
@@ -433,6 +492,15 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
       alive = false;
     };
   }, [redraw]);
+
+  // 图例开关：只换边集与邻接表（力导向 / 邻域 / 局部图 / 绘制都读 store），节点位置与钉住状态保留
+  useEffect(() => {
+    const all = dataRef.current;
+    if (!all) return;
+    dataRef.current = { ...all, edges: filteredEdges, adjacency: adjacencyOf(all.nodes, filteredEdges) };
+    energyRef.current = 1;
+    redraw();
+  }, [filteredEdges, redraw]);
 
   // 条目 36：主题切换时换调色板并强制重绘一帧
   useEffect(() => {
@@ -661,7 +729,7 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
 
       const { x: tx, y: ty, k } = viewRef.current;
       const focusRoot = selectedId || hoverRef.current || (focus ? `${focus.type}:${focus.id}` : null);
-      const neigh = focusRoot && all.edges.length ? neighborhood(all.adjacency, focusRoot, 1) : null;
+      const neigh = focusRoot && filteredEdges.length ? neighborhood(filteredAdjacency, focusRoot, 1) : null;
 
       ctx.save();
       ctx.translate(tx, ty);
@@ -685,10 +753,14 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
             ? skin.edgeDim
             : edge.kind === "source"
               ? skin.edgeSource
-              : skin.edge;
-        ctx.lineWidth = (active ? 1.6 : edge.kind === "source" ? 1.1 : 0.8) / Math.max(k, 0.5);
+              : edge.kind === "similar"
+                ? skin.edgeSimilar
+                : skin.edge;
+        ctx.lineWidth = (active ? 1.6 : edge.kind === "source" ? 1.1 : edge.kind === "similar" ? 0.9 : 0.8) / Math.max(k, 0.5);
+        ctx.setLineDash(edge.kind === "similar" ? [4 / Math.max(k, 0.5), 3 / Math.max(k, 0.5)] : []);
         ctx.stroke();
       }
+      ctx.setLineDash([]);
 
       // 节点
       for (const node of all.nodes) {
@@ -740,7 +812,7 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
       if (wakeRef.current === wake) wakeRef.current = () => {};
       ro.disconnect();
     };
-  }, [visibleIds, colorMode, categoryColor, hits, selectedId, focus, redraw, loading, dataRef.current?.nodes?.length, dataRef.current?.edges?.length]);
+  }, [visibleIds, colorMode, categoryColor, hits, selectedId, focus, redraw, loading, filteredEdges, filteredAdjacency, dataRef.current?.nodes?.length]);
 
   // 指针交互。loading 必须在依赖里：loading 期间 canvas 不在 DOM（提前 return），
   // 翻转后要靠这个依赖重跑一次 effect，监听器才挂得上——否则滚轮/拖拽会随机失灵，
@@ -941,8 +1013,8 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
         {stats ? (
           <div className="rounded-lg bg-fog/[0.04] px-2.5 py-2 text-[11.5px] leading-5 text-mute">
             <div>笔记 {stats.notes} · 文档 {stats.documents}</div>
-            <div>边 {stats.edges} · 未创建 {stats.ghosts}</div>
-            <div>孤立 {stats.isolated}</div>
+            <div>边 {filteredEdges.length} · 未创建 {stats.ghosts}</div>
+            <div>孤立 {isolatedCount}</div>
           </div>
         ) : null}
 
@@ -975,6 +1047,22 @@ export default function GraphView({ focus, onOpenNote, onOpenDocument, onNotify,
               {label}
             </label>
           ))}
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="text-[11px] text-faint">边</div>
+          {EDGE_KIND_ITEMS.map(({ key, label }) => (
+            <label key={key} className="flex cursor-pointer items-center gap-2 text-[12.5px] text-body">
+              <input
+                type="checkbox"
+                checked={edgeKinds[key]}
+                onChange={(e) => setEdgeKinds((prev) => ({ ...prev, [key]: e.target.checked }))}
+                className="accent-brand"
+              />
+              {label}
+            </label>
+          ))}
+          <p className="text-[11px] leading-4 text-faint">相似边 = 内容接近（向量近邻），不是事实关系。</p>
         </div>
 
         <div className="space-y-1.5">

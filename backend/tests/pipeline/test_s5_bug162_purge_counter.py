@@ -142,7 +142,11 @@ async def test_a3_no_chunks_skips_store_and_counter(db, monkeypatch):
 
 
 def test_a4_key_is_one_of_the_frozen_ten():
-    """``stale_vector_points`` 必须在冻结十键内，且键集仍是 10 个、无重复。"""
+    """``stale_vector_points`` 必须在冻结键集内，且键集仍是精确的 11 个、无重复。
+
+    2026-10-08 专项「导入资料自动连线」只增第十一键（`similar_links`）⇒ 本腿计数 10 → 11
+    （**等价强化**：仍是精确等值钉，既不放宽也不改判据语义）。
+    """
     assert KEY in derived_counters.COUNTER_KEYS
-    assert len(derived_counters.COUNTER_KEYS) == 10
-    assert len(set(derived_counters.COUNTER_KEYS)) == 10
+    assert len(derived_counters.COUNTER_KEYS) == 11
+    assert len(set(derived_counters.COUNTER_KEYS)) == 11

@@ -2,17 +2,19 @@
 
 Zhilan is a local-first knowledge base and retrieval-augmented question-answering application.
 It provides a Windows desktop interface, document ingestion, source references, and optional tools.
-Version: **v0.1.5** (public prerelease; known limitations apply). Source code is licensed under **Apache-2.0**.
+Version: **v0.1.6** (public prerelease / trial; known limitations apply). Source code is licensed under **Apache-2.0**.
 Chat and embedding require configured model services, such as an API provider or local Ollama.
 The Chinese documentation below describes setup, usage, and current limitations.
 
 ## 知澜：把自己的资料变成可检索的知识库
 
-知澜将文档、笔记与对话放在本机，帮助你从自己的资料中查找信息并生成带来源的回答。当前源码版本是 **v0.1.5**，整理日期为 **2026 年 10 月 13 日**，预发布标识为 **v0.1.5-public.1**。[本版下载页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.5-public.1)提供源码、Windows 完整程序和安装器，发布身份由同批 SOURCE、清单与标签绑定。旧版成品保留原身份；成品及校验边界见 [发布附件说明](ATTACHMENTS.md)。
+知澜将文档、笔记与对话放在本机，帮助你从自己的资料中查找信息并生成带来源的回答。当前源码版本是 **v0.1.6**，发布日期为 **2026 年 10 月 14 日**，公开预发布标签为 **v0.1.6-public.1**，独立发布批次为 `public-0.1.6-release-20261014`，下载见[本版预发布页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.6-public.1)。发布身份由同批 SOURCE、清单与标签绑定；原本地候选和旧版成品保留原身份，成品及校验边界见 [发布附件说明](ATTACHMENTS.md)。
 
 **旧版 v0.1.0-public.1 于 2026 年 10 月 8 日公开预发布。** [GitHub 仓库](https://github.com/bbaicao/zhilan)与[旧版下载页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.0-public.1)保留原快照及附件；旧下载包不代表当前源码的验证对象。v0.1.1 本地包也保留原身份。
 
-**v0.1.5 按预发布／试用版准备，仍有已知质量与安装验证限制。** 本版在 0.1.4 公开发布线上修复生成笔记的异常 JSON／过长标题、保存失败提示和 Embedding 返回索引兼容问题；保留该发布线的上传、会话恢复、图片和回答状态修复。源码 ZIP、Windows 程序与安装器使用独立发布目录及同批清单核对，旧包保持原身份。变更与限制见 [版本变更](CHANGELOG.md)，发布身份和成品核对规则见 [发布说明](RELEASE.md)。
+**v0.1.6 按预发布／试用版交付，仍有已知质量与安装验证限制。** 本版新增「导入资料自动连线」：同一知识库内内容接近的文档会写入新表，并在图谱中作为第三类边 `similar` 出现，默认开启，也可以关闭。该功能的真实选边质量未达到计划线（开发组合理率 0.4333、留出 0.4667），阈值 `0.65` 只是试验起点而非标定值；它只表示两篇文档的代表向量接近，不代表事实关系，也不参与检索与回答。详细读数与未测边界见 [版本变更](CHANGELOG.md)。
+
+源码 ZIP 从本标签绑定的干净提交重新导出；Windows 程序与安装器沿用已核验的同版公开构建，并与当前产品输入和同批清单核对。旧包保持原身份。发布身份和成品核对规则见 [发布说明](RELEASE.md)。
 
 **运行前提：安装包可以直接打开界面，但问答与向量索引需要先配置聊天、Embedding 模型服务。** 远程服务和启用鉴权的本机服务需要有效 API Key；当前版本连接免鉴权的本机 Ollama 时，也要填写非空占位 Key，例如 `ollama`。离线文档解析模型与这两类模型用途不同，导入解析模型后仍需要配置问答模型。
 
@@ -24,12 +26,13 @@ The Chinese documentation below describes setup, usage, and current limitations.
 
 | 能力 | 当前状态 |
 |---|---|
-| Windows 桌面窗口、设置与本地数据保存 | 已实现，安装与现有 WebView2 环境下的运行已有验证 |
+| Windows 桌面窗口、设置与本地数据保存 | 已实现；旧版在已有 WebView2 环境下有安装及运行验证，0.1.6 新安装未测 |
 | 文本、Markdown、PDF、Office 表格及演示文件导入 | 已实现；解析效果取决于文件内容和格式 |
 | 扫描 PDF 与图片文字识别 | Windows 安装包支持，需要先导入兼容的离线文档解析模型 |
 | 设置页选择模型 ZIP、校验并导入 | 已实现，可查看进度、重开导入面板和重复导入 |
 | 知识库检索、带引用回答、流式对话 | 已实现；模型答案和引用准确性仍需要人工核查 |
 | 笔记、资料关系、会话与工具调用 | 已实现；工具需要相应配置和许可 |
+| 资料之间的「内容接近」自动连线（图谱相似边） | v0.1.6 新增，默认开启；选边质量未达计划线，可以关闭 |
 | 多机器、所有格式、所有模型下的稳定性 | 尚未全面验证，见下文“已知限制” |
 
 ## Windows 安装与首次使用
@@ -113,7 +116,7 @@ foreach ($Mode in @('upload', 'targeted', 'restart-seed', 'restart-read')) {
 }
 ```
 
-本轮四个串行批次按身份去重为 411 通过／1 原有跳过，共 412 项，非一次完整批次、非全量回归。使用合成资料与离线服务替身，不代表真实模型质量。前端构建的统一入口是 [frontend/scripts/build.mjs](frontend/scripts/build.mjs)。Windows 打包工具在 [tools/packaging](tools/packaging)，需要另行准备与锁定依赖匹配的构建环境、前端构建结果和安装器所需资源。具体约定见 [发布与维护说明](RELEASE.md)。
+0.1.4 的历史四个串行批次按身份去重为 411 通过／1 原有跳过，共 412 项，非一次完整批次、非全量回归。0.1.6 准备使用六文件定向检查，共 49 项，覆盖相似边、补修、合库、重建脚本、迁移链及模型结构；两版结果分别登记。检查使用合成资料与离线服务替身，不代表真实模型质量。前端构建的统一入口是 [frontend/scripts/build.mjs](frontend/scripts/build.mjs)。Windows 打包工具在 [tools/packaging](tools/packaging)，需要另行准备与锁定依赖匹配的构建环境、前端构建结果和安装器所需资源。具体约定见 [发布与维护说明](RELEASE.md)。
 
 ## 数据保存与升级
 
@@ -154,7 +157,7 @@ MCP **发现段**失败时，界面可能看不到原因。请查看安装目录
 ## 已知限制
 
 - 当前回答质量尚未达到全部预定目标。已有模型复核仍发现事实错误、引用支持不足和否定语义错误；引用不等于事实保证，重要结论请查看原文。
-- 安装包已在有 WebView2 的 Windows 环境验证；未在缺少 WebView2 的全新机器、所有重启安装分支和物理断网环境完成全面验证。安装程序携带离线 WebView2 运行时，也不能据此声称所有全新机器首启已通过。
+- 旧版安装包已在有 WebView2 的 Windows 环境验证；0.1.6 未执行新安装、升级或卸载。未在缺少 WebView2 的全新机器、所有重启安装分支和物理断网环境完成全面验证。安装程序携带离线 WebView2 运行时，也不能据此声称所有全新机器首启已通过。
 - 不承诺 PDF、表格、幻灯片和图片的版式与文字识别完全保真。解析失败或部分缺页时，应查看提示并核对原文件。
 - 相似回答缓存和实体增强检索默认关闭，其生产质量与净收益尚未完成充分验证。
 - 本地 Qdrant 目录需要单进程使用；不要让多个实例或测试同时打开同一目录。

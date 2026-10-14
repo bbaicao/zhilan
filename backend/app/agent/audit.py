@@ -749,6 +749,9 @@ COUNTER_KEYS: dict[str, tuple[str, ...]] = {
         "stale_vector_points",
         "trace_persist",
         "tool_result_channel",
+        # 🔴 2026-10-08 专项「导入资料自动连线」：权威表 +1 键（`similar_links`）⇒
+        # 本兜底表同笔跟随（否则读失败时形状从 11 键塌缩回 10 键）。
+        "similar_links",
     ),
 }
 

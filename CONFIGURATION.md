@@ -54,6 +54,35 @@ Ollama 的本地兼容接口配置为 `http://127.0.0.1:11434/v1`。需要先运
 
 兼容模型目录结构由应用模型清单约定，改目录前应确认运行时所需的完整结构；任意模型 ZIP 不会被当作兼容包接受。
 
+## 图谱自动连线
+
+同一知识库内，两篇文档代表向量的余弦相似度接近时会生成一条第三类图谱边（`kind="similar"`）。该边在导入发布收尾、重建索引收尾和删除文档时维护，也可以用维护脚本全量重算。它表示「内容接近」，不是事实关系，也不参与检索与回答；维护链只读已有向量，不调用模型。
+
+| 配置键 | 默认 | 含义 |
+|---|---|---|
+| `GRAPHLINK_ENABLE` | `true` | 总开关。关闭时维护链在碰表之前返回，图谱输出与旧版一致；Windows 成品模板同样默认开启 |
+| `GRAPHLINK_TOP_K` | `3` | 每篇文档保留的单向名额（口径是两端 top-K 的并集，不是全局 top-K） |
+| `GRAPHLINK_MIN_SCORE` | `0.65` | 余弦阈值。`0.65` 是试验起点、未标定，调参前请先读 [版本变更](CHANGELOG.md) 的质量读数 |
+| `GRAPHLINK_MAX_DEGREE` | `3` | 每篇文档剪枝后的最终度数上限 |
+| `GRAPHLINK_MAX_CHUNKS_PER_DOC` | `64` | 每篇文档参与代表向量的分块上限，按序号等距均匀抽样 |
+| `GRAPHLINK_MAX_DOCS_PER_KB` | `2000` | 单个知识库参与连线的文档数上限，超出时跳过并写日志 |
+
+这些键只通过本机 `.env` 生效，设置页没有对应字段；修改后需要重启应用。计算量与文档数平方相关：1000 篇约 46 秒，超过 2000 篇的护栏未实测。相似边不携带相似度分数，界面按边类型显示或隐藏。
+
+升级不会立即给全部历史资料补边；重建相关索引会触发维护，也可在已配置的源码 Python 环境中使用 [补算脚本](backend/scripts/rebuild_similarity_edges.py)。先用 0.1.6 启动应用完成数据库迁移至 `0011`，再退出应用、备份实际数据库与向量目录。以下示例用于 SQLite + 本地 Qdrant：从源码根目录执行，使用与原应用一致的 `.env`（尤其向量集合、维度和开关）；目标必须指向同一套资料库及向量索引，本地 Qdrant 不能同时被应用占用。
+
+```powershell
+$Database = Read-Host '请输入实际 SQLite 文件的绝对路径'
+$VectorPath = Read-Host '请输入对应 Qdrant 目录的绝对路径'
+if (-not (Test-Path -LiteralPath $Database -PathType Leaf)) { throw '数据库文件不存在' }
+if (-not (Test-Path -LiteralPath $VectorPath -PathType Container)) { throw '向量目录不存在' }
+$Dsn = 'sqlite:///' + $Database.Replace('\', '/')
+& .\backend\.venv\Scripts\python.exe .\backend\scripts\rebuild_similarity_edges.py --dsn $Dsn --qdrant-path $VectorPath --dry-run
+if ($LASTEXITCODE -ne 0) { throw '试算未成功，请检查输出并停止补算' }
+```
+
+试算只计算、不写相似边。核对结果后，使用同一命令去掉 `--dry-run` 才会写入；可加 `--kb 1,2` 限定知识库。退出码 `0` 表示成功，`1` 表示异常或有库未完成，`2` 表示关态拒绝或参数错误。这个命令不重建向量、不请求模型，Windows 成品自身不提供可直接运行该脚本的独立 Python 命令。MySQL 与服务端 Qdrant 需使用对应连接参数，当前版本没有真实部署验收。
+
 ## 文件工具、MCP 与联网
 
 `WORKSPACE_ROOT` 为空时不启用相应文件工具。在设置页选择工作区根目录后，可以使用受边界限制的只读文件工具，文件路径相对该目录解析，越界路径会拒绝。写入工具另外需要有效的专用确认机制；当前默认配置与界面没有接入完整写入审批，设置根目录不表示模型可以修改文件，也不能仅靠填写确认密钥就完成审批。

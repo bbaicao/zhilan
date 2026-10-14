@@ -2,8 +2,8 @@ r"""v2 ORM 模型（阶段 0 · 0.2 新 schema；历史骨架继承自阶段 2 �
 
 v2 不要求与老库同构；对外只经 API。下列模型声明定义各表的字段与职责。
 
-表清单：notes / documents / document_builds / chunks / chats / session_groups / messages /
-wiki_links / knowledge_bases / usage_events / session_events /
+表清单：notes / documents / document_builds / chunks / document_similarity_edges /
+chats / session_groups / messages / wiki_links / knowledge_bases / usage_events / session_events /
 message_attributions / agent_runs / agent_steps / memories / lexical_materials / lexical_terms。
 
 - 会话分组：``session_groups`` 对应统筹 chat_groups 职责（侧栏分组，前端/契约
@@ -226,6 +226,49 @@ def active_chunks():
     return or_(
         and_(Document.content_build_id.is_(None), Chunk.build_id.is_(None)),
         Chunk.build_id == Document.content_build_id,
+    )
+
+
+class DocumentSimilarityEdge(Base):
+    """导入资料自动连线（专项 · 图谱相似边）：同库两篇文档的「内容接近」关系。
+
+    ⚠️ **语义边界**：`score` = 两端**文档代表向量**的余弦（代表向量 = 该文档当前构建分块
+    等距均匀抽样的均值 + L2 归一）⇒ 只表示「内容接近（向量相似）」，**不是事实关系**，
+    也**不参与召回**（检索与回答链路零改动）。
+
+    端点**已规范化**（`source_document_id < target_document_id`），同分按 `document_id`
+    升序 ⇒ 同一份输入重复重算的结果逐条一致（顺序无关性）。
+
+    `space_id` = 产出该边的模型空间（`app/vector/identity.space_id`）：换 embedding
+    模型/维度后旧边的 `space_id` 与当前构建不匹配即判过期，重算整库覆盖（本表不做版本管理）。
+    无外键：硬删文档时的两端边由 `app/pipeline/ingest.py` 的 purge 显式清理（同 wiki 边先例）。
+    """
+
+    __tablename__ = "document_similarity_edges"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kb_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    source_document_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_document_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    score: Mapped[float] = mapped_column(Float, nullable=False)
+    space_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    dim: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "kb_id",
+            "source_document_id",
+            "target_document_id",
+            name="uk_document_similarity_edges_triple",
+        ),
+        Index("ix_document_similarity_edges_source", "source_document_id"),
+        Index("ix_document_similarity_edges_target", "target_document_id"),
     )
 
 

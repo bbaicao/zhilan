@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.core.errors import RagError
 from app.models import Chunk, Document, IndexBuild, WikiLink, active_chunks
 from app.pipeline.cleaning import rule_fingerprint
+from app.pipeline import graphlink
 from app.pipeline import lexical_index  # noqa: F401 — ORM flush 同事务维护版本分块词项。
 from app.vector.base import VectorPoint
 from app.vector.identity import embedding_identity, point_id, space_id
@@ -408,6 +409,12 @@ async def publish_build(session: AsyncSession, build_id: str, *, embedding=None)
     await _maintain_current_links(
         session, document_id, old_title=old_title, old_kb_id=old_kb_id
     )
+    # 导入资料自动连线（专项 · 2026-10-08）：发布收尾同位置维护「内容接近」边。
+    # 关态零成本（`recompute_after_publish` 在碰表之前返回）；开态失败**不回滚已发布的索引**
+    # （内部自吞异常 + 记日志 + `similar_links` 计数，与上面 `_maintain_current_links` 同款隔离）。
+    # 注：`rollback_build` / `fail_build` / `recover_build` 的收尾不挂本钩子（方案只要求发布点），
+    # 它们的边在下一次发布或维护脚本重算时覆盖 —— 这是有意的覆盖面取舍。
+    await graphlink.recompute_after_publish(session, document_id)
     doc = await session.get(Document, document_id)
     # Link maintenance already refreshed the published body; rollback still reloads it.
     if doc is not None and inspect(doc).unloaded:

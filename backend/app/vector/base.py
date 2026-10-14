@@ -109,6 +109,20 @@ class VectorStore(ABC):
     def get_by_ids(self, ids: list[str]) -> list[VectorHit]:
         ...
 
+    def fetch_vectors(self, ids: list[str]) -> dict[str, list[float]]:
+        """按点 id **批量读回向量**（只读；返回 `{str(点 id): 向量}`，读不到的点不出现）。
+
+        为什么协议里要有这个只读入口（专项 · 图谱自动连线）：文档代表向量 =「该文档当前构建
+        分块的向量均值」，而 :meth:`get_by_ids` 明确只回 payload、不回向量 ⇒ 没有别的地方
+        能把向量读回来。
+
+        ⚠️ **默认实现 `raise NotImplementedError`，刻意不设为 `abstractmethod`**：
+        设成抽象方法会让既有测试替身（假 store / 非 `object.__new__` 的构造路径）在实例化时
+        直接炸——这条能力只有向量维护链（`app/pipeline/graphlink.py`）用得上。
+        `ids` 里查不到的 id 不报错（两次读取之间可能被删/重建），由调用方按缺口计数。
+        """
+        raise NotImplementedError("VectorStore.fetch_vectors 未实现")
+
     @abstractmethod
     def count(self) -> int:
         ...

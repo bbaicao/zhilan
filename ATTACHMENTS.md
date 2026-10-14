@@ -1,4 +1,14 @@
-# v0.1.5 公开预发布与成品说明
+# v0.1.6 公开预发布与成品说明
+
+日期：2026-10-14。当前源码及前端版本为 v0.1.6，独立发布批次为 `public-0.1.6-release-20261014`，预发布标签 `v0.1.6-public.1`，下载见[本版发布页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.6-public.1)。用户已授权提交与公开预发布，`publication_authorized=true`；成品身份见本批 `release-manifest.json` 和 `SHA256SUMS.txt`，其中 `publication` 块登记 `product_acceptance=NOT_PASS`。
+
+本批提供 `zhilan-source-0.1.6-candidate.zip`、`zhilan-windows-0.1.6-public-release-20261014.zip`、`zhilan-setup-0.1.6-public-release-20261014.exe`、源码／载荷清单与说明、许可及安装条款。完整程序 ZIP 必须解压全部文件后运行 `zhilan.exe`；程序与安装器实际版本为 0.1.6／数字 0.1.6.0。Windows 成品来自原 0.1.6 公开源码的独立构建；复核和发布只更新源码包与配套说明，程序 ZIP 和安装器与原批次字节相同，并核对当前产品输入、前端、载荷及许可。原 `public-0.1.6-ready-20261014`、`public-0.1.6-ready-20261014-r2` 与封存报告保留。本轮没有运行新安装器。
+
+SOURCE 记录最终发布提交 `git_head`、`git_dirty=false`、`release_tag=v0.1.6-public.1` 及实际 `source_tree_hash`；逐件清单与源码导出绑定同一干净提交。源码 ZIP 保留导出器约定的 `candidate` 文件名，身份以 SOURCE 和标签为准；原候选保留 `git_dirty=true` 的历史记录。没有新增模型包，仍使用[旧版公开模型包](https://github.com/bbaicao/zhilan/releases/tag/v0.1.0-public.1)并保留原身份和许可范围。全部旧附件、旧标签及旧证据保持原内容。
+
+本地检查与材料扫描不能证明新安装、升级／卸载、全新机器、物理断网或真实模型质量。历史质量 FAIL、豁免、未知费用及许可来源限制保留，`product_acceptance=NOT_PASS`。变更见 [CHANGELOG](CHANGELOG.md)，源码运行见 [README](README.md)。
+
+## 历史 v0.1.5 公开预发布与成品说明
 
 日期：2026-10-13。当前源码及前端版本为 v0.1.5，公开预发布标识为 `v0.1.5-public.1`，独立发布批次为 `public-0.1.5-release-20261013`，下载见[本版预发布页面](https://github.com/bbaicao/zhilan/releases/tag/v0.1.5-public.1)。用户已明确授权提交与公开发布，`publication_authorized=true`；实际附件身份见本批 `release-manifest.json` 和 `SHA256SUMS.txt`。
 
@@ -20,7 +30,7 @@ SOURCE 记录最终发布提交 `git_head`、`git_dirty=false`、`release_tag` �
 
 代码／配置上传错误已补修，两项测试合同与四项缺夹具问题已处理，四个串行批次去重为 411P／1S、共 412 项；原失败记录保留。具体范围见 [版本变更](CHANGELOG.md)。冻结核验和成品哈希不代表新安装、升级／卸载、全新机器或模型质量通过。许可文件同源和字节核对不补齐上游版本及来源链。
 
-以下全部为 **2026-10-09 的 v0.1.1 历史本地批次**，不是当前 v0.1.5 成品或实测结果。
+以下全部为 **2026-10-09 的 v0.1.1 历史本地批次**，不是当前 v0.1.6 成品或实测结果；各历史章节的“本版”“本次”仅指该章节标明的版本与日期。
 
 ## 历史 v0.1.1-public.1 候选附件说明
 

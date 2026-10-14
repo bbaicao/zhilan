@@ -67,6 +67,8 @@ EXPECTED_DERIVED_KEYS = {
     "stale_vector_points",
     "trace_persist",
     "tool_result_channel",
+    # 🔴 2026-10-08 专项「导入资料自动连线」：第十一键（只增不改义，尾部追加）。
+    "similar_links",
 }
 
 

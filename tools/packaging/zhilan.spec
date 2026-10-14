@@ -306,6 +306,7 @@ excludes = [
     "torchvision",
     "torchaudio",
     # 开发/测试期才用的东西，不该进发布包。
+    "sitecustomize",
     "pytest",
     "_pytest",
     "IPython",

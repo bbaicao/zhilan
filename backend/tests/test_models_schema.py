@@ -28,6 +28,7 @@ EXPECTED_TABLES = {
     "documents",
     "document_builds",
     "chunks",
+    "document_similarity_edges",
     "chats",
     "messages",
     "message_attributions",

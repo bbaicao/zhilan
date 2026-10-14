@@ -39,6 +39,21 @@ def _point_id(value: str | int) -> int | str:
     return text
 
 
+def _vector_values(vector: Any) -> list[float]:
+    """把 `Record.vector` 归一到裸浮点数组；读不到（None / 空 / 坏值）回空表。
+
+    Qdrant 在**命名向量**集合里把向量回成 `{"<向量名>": [...]}`（裸集合才是数组）⇒
+    这里统一取第一个（本仓只用一个默认向量）；坏值不抛，由调用方按缺口计数。
+    """
+    values = next(iter(vector.values()), None) if isinstance(vector, dict) else vector
+    if not values:
+        return []
+    try:
+        return [float(item) for item in values]
+    except (TypeError, ValueError):
+        return []
+
+
 class QdrantVectorStore(VectorStore):
     def __init__(
         self,
@@ -327,6 +342,30 @@ class QdrantVectorStore(VectorStore):
                 rid = str(getattr(r, "id", r))
                 payload = dict(getattr(r, "payload", None) or {})
             out.append(VectorHit(id=rid, score=0.0, payload=payload))
+        return out
+
+    def fetch_vectors(self, ids: list[str]) -> dict[str, list[float]]:
+        if not ids:
+            return {}
+        result = self._require_client().retrieve(
+            collection_name=self.collection,
+            ids=[_point_id(i) for i in ids],
+            with_payload=False,
+            with_vectors=True,
+        )
+        # 新版返回 list[Record]；旧版可能返回 (list, next_offset)
+        records = result[0] if isinstance(result, tuple) else result
+        out: dict[str, list[float]] = {}
+        for r in records:
+            if isinstance(r, tuple):
+                rid = str(r[0])
+                vector = r[1] if len(r) > 1 else None
+            else:
+                rid = str(getattr(r, "id", r))
+                vector = getattr(r, "vector", None)
+            values = _vector_values(vector)
+            if values:
+                out[rid] = values
         return out
 
     def count(self) -> int:

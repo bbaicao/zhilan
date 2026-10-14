@@ -134,11 +134,11 @@ class GraphNode(BaseModel):
 
 
 class GraphEdge(BaseModel):
-    """图谱边：wiki = ``[[标题]]``；source = 笔记溯源文档（条目 29）。"""
+    """图谱边：wiki = ``[[标题]]``；source = 笔记溯源文档（条目 29）；similar = 内容接近（专项，关态不产出）。"""
 
     source: str
     target: str
-    kind: Literal["wiki", "source"] = "wiki"
+    kind: Literal["wiki", "source", "similar"] = "wiki"
 
 
 class GraphStats(BaseModel):
